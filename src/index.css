@@ -1,0 +1,147 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Custom smooth transition classes */
+.theme-transition {
+  transition: background-color 1.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              background-image 1.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.8s ease;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* =========================================================
+   Holographic Chromatic Aberration & Digital Glitch Effect
+   ========================================================= */
+@keyframes holoGlitch {
+  0%, 86%, 100% {
+    filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.2));
+    transform: translate(0, 0) skew(0deg);
+  }
+  87% {
+    filter: drop-shadow(-3px 0 0 rgba(236, 72, 153, 0.75)) drop-shadow(3px 0 0 rgba(34, 211, 238, 0.75)) brightness(1.15);
+    transform: translate(-2px, 0.5px) skew(-0.6deg);
+    clip-path: inset(12% 0 16% 0);
+  }
+  88% {
+    filter: drop-shadow(3px -1px 0 rgba(236, 72, 153, 0.8)) drop-shadow(-3px 1px 0 rgba(34, 211, 238, 0.8)) contrast(1.25);
+    transform: translate(2px, -0.5px) skew(0.5deg);
+    clip-path: inset(0% 0 0% 0);
+  }
+  89% {
+    filter: drop-shadow(-1px 0 0 rgba(236, 72, 153, 0.4)) drop-shadow(1px 0 0 rgba(59, 130, 246, 0.5));
+    transform: translate(0, 0) skew(0deg);
+  }
+  93% {
+    filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.2));
+    transform: translate(0, 0);
+  }
+  94% {
+    filter: drop-shadow(-2.5px 1px 0 rgba(168, 85, 247, 0.75)) drop-shadow(2.5px -1px 0 rgba(34, 211, 238, 0.75));
+    transform: translate(-1.5px, -0.5px) scale(1.003);
+    clip-path: inset(48% 0 32% 0);
+  }
+  95% {
+    filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.2));
+    transform: translate(0, 0) scale(1);
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.animate-holo-glitch {
+  animation: holoGlitch 6.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+/* Holographic scanline sweep animation */
+@keyframes holoScanline {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.18;
+  }
+  70% {
+    opacity: 0.18;
+  }
+  100% {
+    transform: translateY(1000%);
+    opacity: 0;
+  }
+}
+
+.animate-holo-scanline {
+  animation: holoScanline 7s linear infinite;
+}
+
+/* =========================================================
+   Biometric Heartbeat Outward Expanding Glow Pulse
+   ========================================================= */
+@keyframes biometricPulseSlow {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.85;
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.6);
+  }
+  40% {
+    opacity: 0.45;
+  }
+  80% {
+    transform: scale(1.65);
+    opacity: 0;
+    box-shadow: 0 0 0 28px rgba(34, 211, 238, 0);
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+    box-shadow: 0 0 0 45px rgba(34, 211, 238, 0);
+  }
+}
+
+@keyframes biometricPulseFast {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.9;
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7);
+  }
+  40% {
+    opacity: 0.5;
+  }
+  80% {
+    transform: scale(1.7);
+    opacity: 0;
+    box-shadow: 0 0 0 32px rgba(168, 85, 247, 0);
+  }
+  100% {
+    transform: scale(1.95);
+    opacity: 0;
+    box-shadow: 0 0 0 50px rgba(168, 85, 247, 0);
+  }
+}
+
+.animate-biometric-heartbeat {
+  animation: biometricPulseSlow 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.animate-biometric-heartbeat-fast {
+  animation: biometricPulseFast 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.animate-biometric-heartbeat-delayed {
+  animation: biometricPulseSlow 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  animation-delay: 0.75s;
+}
+

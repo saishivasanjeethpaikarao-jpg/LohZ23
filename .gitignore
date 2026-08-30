@@ -1,0 +1,59 @@
+node_modules/
+.tools/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.agent-token
+windows-agent/logs/
+windows-agent/screenshots/
+windows-agent/workspace/
+
+# Process-local runtime artifacts and scratch files
+*.pid
+agent.log
+server.log
+tmp*.json
+*.bak
+nul
+
+# Local diagnostics / one-off connectivity scripts
+debug_live_connection.cjs
+test_agent_ws.cjs
+test_agent_ws.js
+test_bridge.js
+test_main_ws.cjs
+test-settings.cjs
+
+# Ruflo local secrets and runtime data
+.env
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+
+# Local assistant/orchestration state (not LOHZ product source)
+.agents/
+.claude/
+.claude-flow/
+.mimosa/
+.swarm/
+hive/
+roster-backups/
+roster.json
+checklist.json
+.mcp.json
+
+# User memory data (per-user scoped)
+data/
+
+# Credential store and service account (never commit)
+.credential_store_key
+.credentials.enc
+firebase-service-account.json
+.firebase/
+firestore-debug.log

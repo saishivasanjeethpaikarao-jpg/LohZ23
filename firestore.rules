@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// LOHZ Firestore Security Rules
+//
+// Goal: enforce user isolation at the database layer. Every rule is
+// keyed to the authenticated UID (`request.auth.uid`). The Admin SDK
+// bypasses these rules on the server side; it is the SERVER's
+// responsibility to scope every Admin SDK write/read to the
+// authenticated UID (see `FirestoreUserStoreImpl`).
+//
+// Path layout:
+//   users/{uid}                              (profile)
+//   users/{uid}/preferences/_root
+//   users/{uid}/memories/{memoryId}
+//   users/{uid}/cognitiveState/_root
+//   users/{uid}/userModel/_root
+//   users/{uid}/temporal/_root
+//   users/{uid}/plans/{planId}
+//   users/{uid}/executions/{requestId}
+//   users/{uid}/observations/{observationId}
+//   users/{uid}/idempotency/{key}
+//   users/{uid}/goals/{goalId}
+//   users/{uid}/learning/{patternId}
+//   users/{uid}/migrations/{source}
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && request.resource.data.uid == uid;
+
+      match /preferences/_root {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /cognitiveState/_root {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /userModel/_root { allow read, write: if isOwner(uid); }
+      match /temporal/_root { allow read, write: if isOwner(uid); }
+
+      match /memories/{memoryId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /goals/{goalId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /learning/{patternId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /migrations/{source} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /plans/{planId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && request.resource.data.userId == uid;
+      }
+      match /executions/{requestId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && request.resource.data.uid == uid;
+      }
+      match /observations/{observationId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && request.resource.data.uid == uid;
+      }
+      match /idempotency/{key} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && request.resource.data.uid == uid;
+      }
+    }
+
+    // Health probe — public read for liveness checks; no writes.
+    match /_health/ping {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
