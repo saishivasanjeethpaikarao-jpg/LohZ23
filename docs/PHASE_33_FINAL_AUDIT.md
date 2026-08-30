@@ -133,7 +133,7 @@ Method: `npx tsx scripts/phase33-benchmark.ts`, using 500 sequential in-process 
 
 ## 14. Credential security
 
-`.env.example` contains placeholders only; `.env`, the AES-256-GCM credential store, key material, and service accounts are ignored. After action-time approval, the application credential was rotated to the existing `Gemini API Key 4` ending `j_Iw`, stored only in the ignored encrypted credential store, and validated with a successful read-only Gemini models request. The exposed `Gemini API Key 3` ending `Uttg` was then permanently revoked and verified absent from the provider inventory.
+`.env.example` contains placeholders only; `.env`, the AES-256-GCM credential store, key material, and service accounts are ignored. After action-time approval, the application credential was rotated to the existing `Generative Language API Key` ending `_Hcw`, stored only in the ignored encrypted credential store, and validated with successful read-only Gemini models requests. The originally exposed `Gemini API Key 3` ending `Uttg` and the trace-exposed interim `Gemini API Key 4` ending `j_Iw` were permanently deleted and verified absent from the authoritative Google Cloud API-key inventory. The clean replacement remained valid after both deletions.
 
 ## 15. Duplicate-system gate
 
