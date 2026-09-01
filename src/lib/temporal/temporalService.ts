@@ -397,7 +397,16 @@ export class TemporalService {
     }
     const work = this.flushWithRetry(uid);
     this.flushLocks.set(uid, work);
-    try { return await work; } finally { this.flushLocks.delete(uid); }
+    let saved = false;
+    try {
+      saved = await work;
+    } finally {
+      this.flushLocks.delete(uid);
+    }
+    // A mutation can arrive while persistence is awaiting I/O even when no
+    // second caller invokes flush(). Drain that newer version before claiming
+    // the flush completed.
+    return saved && this.dirty.has(uid) ? this.flush(uid) : saved;
   }
 
   hasPending(uid: string): boolean {

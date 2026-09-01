@@ -209,7 +209,7 @@ describe("CognitiveRouter execution", () => {
     const { exec } = okExec();
     const router = new CognitiveRouter({ executeTool: exec, gateway: { generate } });
     const out = await router.route("userA", "why does this fail?");
-    expect(out.success).toBe(true); // graceful
+    expect(out.success).toBe(false); // graceful, but never a false completion
     expect(out.response).toContain("Reasoning failed");
     expect(out.diagnostic.errorKind).toBe("model_failed");
   });
@@ -218,6 +218,7 @@ describe("CognitiveRouter execution", () => {
     const { exec } = okExec();
     const router = new CognitiveRouter({ executeTool: exec });
     const out = await router.route("userA", "compare rest vs graphql");
+    expect(out.success).toBe(false);
     expect(out.response).toContain("unavailable");
   });
 
@@ -228,7 +229,27 @@ describe("CognitiveRouter execution", () => {
     const out = await router.route("userA", "finish my LOHZ deployment while I'm away");
     expect(calls).toHaveLength(0);
     expect(out.response).toContain("AUTONOMOUS_REQUEST");
+    expect(out.success).toBe(false);
     expect(temporal.recordObservation).not.toHaveBeenCalled();
+  });
+
+  it("does not report success when the planner seam returns a failed execution state", async () => {
+    const { exec } = okExec();
+    const router = new CognitiveRouter({
+      executeTool: exec,
+      planner: {
+        shouldPlan: () => true,
+        createPlan: async () => ({
+          ok: true,
+          plan: { id: "p-failed", title: "Failed plan", status: "failed", confidence: 0.9 },
+          summary: "PLANNED then failed honestly",
+          modelCallsUsed: 1,
+        }),
+      },
+    });
+    const out = await router.route("userA", "finish my deployment while I am away");
+    expect(out.success).toBe(false);
+    expect(out.diagnostic.errorKind).toBe("planned_execution_failed");
   });
 
   it("trivial commands do NOT create temporal events; meaningful ones do", async () => {

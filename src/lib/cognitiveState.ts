@@ -54,7 +54,7 @@ export interface ContextSignal {
 
 export interface MemoryReference {
   id: string;
-  layer: "working" | "episodic" | "semantic" | "user_model" | "procedural";
+  layer: "working" | "episodic" | "semantic" | "procedural";
   content: string;
   relevance: number;
   metadata: MemoryMetadata;

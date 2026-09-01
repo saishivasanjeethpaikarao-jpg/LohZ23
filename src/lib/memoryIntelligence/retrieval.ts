@@ -96,7 +96,6 @@ export function scoreMemory(
   let layerAffinity = 0.5;
   if (q.layer && mem.layer === q.layer) layerAffinity = 1;
   else if (mem.layer === "semantic") layerAffinity = 0.7;
-  else if (mem.layer === "user_model") layerAffinity = 0.6;
 
   const score =
     semantic * weights.semantic +

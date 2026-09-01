@@ -21,6 +21,9 @@ export interface TranscriptEntry {
   emotion?: string;
   toolUsed?: string;
   isFinal?: boolean;
+  speakerId?: string;
+  speakerRole?: "primary_user" | "participant" | "unknown";
+  speakerName?: string;
 }
 
 export interface TranscriptionPanelProps {
@@ -66,7 +69,9 @@ export function TranscriptionPanel({
     const text = entries
       .map(e => {
         const time = new Date(e.timestamp).toLocaleTimeString();
-        const label = e.role === "user" ? "USER" : e.role === "assistant" ? "LOHZ" : "SYSTEM";
+        const label = e.role === "user"
+          ? (!e.speakerRole || e.speakerRole === "primary_user" ? "YOU" : e.speakerName || "PARTICIPANT")
+          : e.role === "assistant" ? "LOHZ" : "SYSTEM";
         return `[${time}] ${label}: ${e.text}`;
       })
       .join("\n");
@@ -255,6 +260,9 @@ function TranscriptEntryRow({ entry, themeAccent }: TranscriptEntryRowProps) {
   }
 
   const isUser = entry.role === "user";
+  const speakerLabel = !entry.speakerRole || entry.speakerRole === "primary_user"
+    ? "YOU"
+    : entry.speakerName || (entry.speakerRole === "unknown" ? "GUEST" : "PARTICIPANT");
 
   return (
     <motion.div
@@ -269,7 +277,7 @@ function TranscriptEntryRow({ entry, themeAccent }: TranscriptEntryRowProps) {
         ) : (
           <Volume2 size={9} className={themeAccent.text} />
         )}
-        <span>{isUser ? "YOU" : "LOHZ"}</span>
+        <span>{isUser ? speakerLabel : "LOHZ"}</span>
         {entry.emotion && (
           <span className="text-white/20">· {entry.emotion}</span>
         )}

@@ -12,6 +12,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import net from "net";
 
 export interface SafePathResolution {
   ok: boolean;
@@ -122,7 +123,56 @@ export function resolveSafePath(inputPath: string): SafePathResolution {
     }
   }
 
+  // Lexical containment is insufficient when an allowed directory contains a
+  // junction/symlink. Resolve the nearest existing ancestor and ensure its
+  // real path remains inside the real allowed root before any file operation.
+  try {
+    const rootPath = path.resolve(matchedRoot.dir);
+    const realRoot = fs.existsSync(rootPath) ? fs.realpathSync.native(rootPath) : rootPath;
+    let ancestor = normalized;
+    while (!fs.existsSync(ancestor)) {
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) break;
+      ancestor = parent;
+    }
+    if (fs.existsSync(ancestor)) {
+      const realAncestor = fs.realpathSync.native(ancestor);
+      const rootKey = realRoot.toLowerCase();
+      const ancestorKey = realAncestor.toLowerCase();
+      if (ancestorKey !== rootKey && !ancestorKey.startsWith(rootKey + path.sep.toLowerCase())) {
+        return { ok: false, errorCode: "PATH_LINK_ESCAPE", details: "Path escapes its allowed root through a link." };
+      }
+    }
+  } catch {
+    return { ok: false, errorCode: "PATH_REALPATH_FAILED", details: "Could not verify the path's real location." };
+  }
+
   return { ok: true, target: normalized, rootName: matchedRoot.name };
+}
+
+/** True only for public-looking DNS names or non-private IP addresses. */
+export function isPublicHostname(input: string): boolean {
+  const host = String(input || "").trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return false;
+  const kind = net.isIP(host);
+  if (kind === 4) {
+    const parts = host.split(".").map(Number);
+    const [a, b] = parts;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+    if (a === 198 && (b === 18 || b === 19)) return false;
+    return true;
+  }
+  if (kind === 6) {
+    if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd")) return false;
+    if (/^fe[89ab]/.test(host) || host.startsWith("::ffff:127.") || host.startsWith("::ffff:10.")) return false;
+    return true;
+  }
+  if (!host.includes(".") || host.length > 253) return false;
+  return host.split(".").every((label) => /^(?!-)[a-z0-9-]{1,63}(?<!-)$/.test(label));
 }
 
 /** Validates a bare file/folder NAME (no separators, no traversal). */

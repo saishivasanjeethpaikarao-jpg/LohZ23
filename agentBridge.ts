@@ -82,6 +82,9 @@ export class AgentBridge {
 
   constructor(opts: { host?: string; port?: number; token?: string } = {}) {
     this.host = opts.host || process.env.LOHZ_AGENT_HOST || DEFAULT_HOST;
+    if (this.host !== "127.0.0.1" && this.host !== "localhost") {
+      throw new Error("AgentBridge only permits a loopback Windows Agent host");
+    }
     this.port = opts.port || Number(process.env.LOHZ_AGENT_PORT) || DEFAULT_PORT;
     this.token = opts.token || resolveBridgeToken();
     this.status = {
@@ -206,6 +209,7 @@ export class AgentBridge {
 
     socket.on("close", () => {
       this.ws = null;
+      this.rejectPending("Windows Agent connection closed before a result was received.");
       this.updateStatus({ online: false, connecting: false });
       this.scheduleReconnect();
     });
@@ -223,15 +227,15 @@ export class AgentBridge {
    * Execute a tool on the Windows Agent. Prefers WebSocket, falls back to HTTP.
    */
   async executeTool(name: string, params: Record<string, any>, timeoutMs = 30000): Promise<BridgeToolResult> {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      return this.executeViaWs(name, params, timeoutMs);
+      return this.executeViaWs(requestId, name, params, timeoutMs);
     }
-    return this.executeViaHttp(name, params, timeoutMs);
+    return this.executeViaHttp(requestId, name, params, timeoutMs);
   }
 
-  private executeViaWs(name: string, params: Record<string, any>, timeoutMs: number): Promise<BridgeToolResult> {
+  private executeViaWs(requestId: string, name: string, params: Record<string, any>, timeoutMs: number): Promise<BridgeToolResult> {
     return new Promise<BridgeToolResult>((resolve, reject) => {
-      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
         reject(new Error("Tool execution timed out."));
@@ -254,9 +258,9 @@ export class AgentBridge {
     });
   }
 
-  private executeViaHttp(name: string, params: Record<string, any>, timeoutMs: number): Promise<BridgeToolResult> {
+  private executeViaHttp(requestId: string, name: string, params: Record<string, any>, timeoutMs: number): Promise<BridgeToolResult> {
     return new Promise<BridgeToolResult>((resolve, reject) => {
-      const body = JSON.stringify({ name, params: params || {} });
+      const body = JSON.stringify({ requestId, name, params: params || {} });
       const req = http.request(
         {
           host: this.host,
@@ -290,6 +294,14 @@ export class AgentBridge {
       req.write(body);
       req.end();
     });
+  }
+
+  private rejectPending(message: string): void {
+    for (const [, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(message));
+    }
+    this.pending.clear();
   }
 }
 

@@ -85,10 +85,20 @@ export class MemoryIntelligenceService {
       };
     }
 
-    const existing = (await this.store.load(input.userId)) ?? [];
-    if (existing.length === 0 && input.userId) {
-      failures.push("persistence unavailable or first-use — starting fresh");
+    const loaded = await this.store.load(input.userId);
+    if (loaded === null) {
+      return {
+        extracted: { candidates: [], dropped: input.turns.length },
+        actions: [],
+        persisted: { added: 0, updated: 0, kept: 0, ignored: 0, archived: 0, removed: 0 },
+        failures: ["persistence load unavailable — refusing to overwrite unknown state"],
+        persistenceVerified: false,
+      };
     }
+    // One-way compatibility migration: Phase 35 removed the duplicate
+    // user_model memory layer. User profile facts are semantic evidence.
+    const existing = loaded.map((memory) =>
+      (memory.layer as string) === "user_model" ? { ...memory, layer: "semantic" as const } : memory);
 
     const ctx: ExtractionContext = {
       userId: input.userId,

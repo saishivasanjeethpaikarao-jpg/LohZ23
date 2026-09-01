@@ -35,6 +35,8 @@ export interface MockFirestoreOptions {
 
 export class MockFirestore implements FirestoreLike {
   private docs = new Map<string, unknown>();
+  /** Serialize transactions so concurrent tests model atomic conflict handling. */
+  private transactionTail: Promise<void> = Promise.resolve();
   /** Optional simulated-outage toggle that tests can flip on/off. */
   public failureMode: Error | null = null;
   /** Operation log for assertions in tests. */
@@ -98,6 +100,18 @@ export class MockFirestore implements FirestoreLike {
   }
 
   async runTransaction<T>(fn: (tx: TransactionContext) => Promise<T>): Promise<T> {
+    const previous = this.transactionTail;
+    let release!: () => void;
+    this.transactionTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await this.runSerializedTransaction(fn);
+    } finally {
+      release();
+    }
+  }
+
+  private async runSerializedTransaction<T>(fn: (tx: TransactionContext) => Promise<T>): Promise<T> {
     this.checkFailure();
     const pending = new Map<string, { kind: "set" | "delete"; value?: unknown }>();
     const firestore = this;

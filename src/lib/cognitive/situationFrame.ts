@@ -35,7 +35,8 @@ export interface FrameInput {
   activeGoals: SituationFrame["activeGoals"];
   relevantMemories: SituationFrame["relevantMemories"];
   relevantUserPreferences: Record<string, string>;
-  worldAssertions: string[];
+  worldAssertions: SituationFrame["relevantWorldAssertions"];
+  conversationContext?: SituationFrame["conversationContext"];
   recentEvents: SituationFrame["temporalContext"]["recentImportantEvents"];
   recentTopics: string[];
   absenceMs: number | null;
@@ -77,7 +78,31 @@ export function createSituationFrame(
     ),
     relevantWorldAssertions: input.worldAssertions
       .slice(0, FRAME_LIMITS.topics)
-      .map((a) => clip(a, FRAME_LIMITS.snippetChars)),
+      .map((a) => ({
+        id: clip(a.id, 160), entity: clip(a.entity, 160), relation: clip(a.relation, 64),
+        value: typeof a.value === "string" ? clip(a.value, FRAME_LIMITS.snippetChars) : a.value,
+        observedAt: Number.isFinite(a.observedAt) ? a.observedAt : input.assembledAt,
+        confidence: Math.max(0, Math.min(1, a.confidence)), source: clip(a.source, 160),
+        status: a.status === "stale" ? "stale" : "active",
+      })),
+    conversationContext: input.conversationContext
+      ? {
+          conversationMode: input.conversationContext.conversationMode,
+          participantCount: Math.max(1, Math.min(8, input.conversationContext.participantCount)),
+          activeSpeaker: input.conversationContext.activeSpeaker
+            ? { ...input.conversationContext.activeSpeaker }
+            : null,
+          recentSpeakerTurns: input.conversationContext.recentSpeakerTurns
+            .slice(-FRAME_LIMITS.speakerTurns)
+            .map((turn) => ({ ...turn, text: clip(turn.text, FRAME_LIMITS.snippetChars) })),
+          speakerConfidence: {
+            ...input.conversationContext.speakerConfidence,
+            value: Math.max(0, Math.min(1, input.conversationContext.speakerConfidence.value)),
+          },
+          overlapDetected: Boolean(input.conversationContext.overlapDetected),
+          addressedToLohz: input.conversationContext.addressedToLohz,
+        }
+      : null,
     temporalContext: {
       recentImportantEvents: input.recentEvents.slice(0, FRAME_LIMITS.events),
       recentTopics: input.recentTopics.slice(0, FRAME_LIMITS.topics),

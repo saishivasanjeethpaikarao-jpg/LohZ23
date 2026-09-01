@@ -346,7 +346,7 @@ export class ReflectionEngine {
       updates.push({
         action: "ADD",
         id: "",
-        layer: "user_model",
+        layer: "semantic",
         category: "preference",
         text: insight.description,
         metadata: {

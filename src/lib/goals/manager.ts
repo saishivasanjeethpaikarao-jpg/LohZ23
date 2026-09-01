@@ -354,7 +354,7 @@ export class AutonomousGoalManager {
     uid: string,
     goalId: string,
     progress: number,
-    evidence: { source: "user_statement" | "task_completed" | "verified_action" | "model_inference"; memoryId?: string }
+    evidence: { source: "user_statement" | "task_completed" | "verified_action" | "model_inference"; memoryId?: string; worldAssertionId?: string }
   ): Promise<GoalOperationResult> {
     if (!Number.isFinite(progress)) return { ok: false, reason: "progress must be numeric" };
     const p = clamp01(progress);
@@ -379,6 +379,10 @@ export class AutonomousGoalManager {
     if (evidence.memoryId) {
       const ids = new Set([...(goal.relatedMemoryIds ?? []), evidence.memoryId]);
       goal.relatedMemoryIds = [...ids].slice(-GOAL_LIMITS.maxRelatedMemoryIds);
+    }
+    if (evidence.worldAssertionId) {
+      const ids = new Set([...(goal.relatedWorldAssertionIds ?? []), evidence.worldAssertionId]);
+      goal.relatedWorldAssertionIds = [...ids].slice(-GOAL_LIMITS.maxRelatedMemoryIds);
     }
 
     let transitioned: GoalLifecycle | null = null;

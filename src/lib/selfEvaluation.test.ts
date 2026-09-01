@@ -510,7 +510,7 @@ describe("SelfEvaluationEngine", () => {
       });
       const eval_ = engine.evaluateOutcome(outcome);
       expect(eval_.memoryCandidates!.length).toBe(1);
-      expect(eval_.memoryCandidates![0].layer).toBe("user_model");
+      expect(eval_.memoryCandidates![0].layer).toBe("semantic");
       expect(eval_.memoryCandidates![0].category).toBe("preference");
     });
 

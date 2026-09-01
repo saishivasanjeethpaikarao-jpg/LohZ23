@@ -61,6 +61,7 @@ export interface GoalRecord {
   parentGoalId?: string;
   relatedProjectKey?: string;
   relatedMemoryIds?: string[];
+  relatedWorldAssertionIds?: string[];
   confidence?: number;
   blockedReason?: string;
   blockingGoalId?: string;
@@ -137,6 +138,12 @@ export interface FirestoreUserStore {
   // Phase 25 — bounded temporal state (ring-buffered events/topics/sessions)
   getTemporalState(uid: string): Promise<Record<string, unknown> | null>;
   setTemporalState(uid: string, state: Record<string, unknown>): Promise<boolean>;
+
+  // Phase 34 — durable plan/execution/observation seams
+  getUserDoc(uid: string, collection: "plans" | "executions" | "observations", id: string): Promise<Record<string, unknown> | null>;
+  setUserDoc(uid: string, collection: "plans" | "executions" | "observations", id: string, data: Record<string, unknown>): Promise<boolean>;
+  deleteUserDoc(uid: string, collection: "plans" | "executions" | "observations", id: string): Promise<boolean>;
+  listUserDocs(uid: string, collection: "plans" | "executions" | "observations"): Promise<Array<{ id: string; data: Record<string, unknown> }> | null>;
 
   // Diagnostic
   isHealthy(): Promise<boolean>;
@@ -278,7 +285,8 @@ export class FirestoreUserStoreImpl implements FirestoreUserStore {
     try {
       const snap = await (this.sub(uid, "preferences") as any).get();
       if (!snap.exists) return null;
-      return snap.data() as UserInteractionPreferences;
+      const data = snap.data() as UserInteractionPreferences;
+      return data?.userId === uid ? data : null;
     } catch (e) {
       this.log("getPreferences failed", e);
       return null;
@@ -308,7 +316,10 @@ export class FirestoreUserStoreImpl implements FirestoreUserStore {
       const out: Memory[] = [];
       for (const id of ids) {
         const snap = await (this.memoryRef(uid, id) as any).get();
-        if (snap.exists) out.push(snap.data() as Memory);
+        if (snap.exists) {
+          const memory = snap.data() as Memory;
+          if (memory?.metadata?.userId === uid) out.push(memory);
+        }
       }
       return out;
     } catch (e) {
@@ -372,7 +383,8 @@ export class FirestoreUserStoreImpl implements FirestoreUserStore {
     try {
       const snap = await (this.sub(uid, "cognitiveState") as any).get();
       if (!snap.exists) return null;
-      return snap.data() as CognitiveStateRecord;
+      const data = snap.data() as CognitiveStateRecord;
+      return data?.uid === uid ? data : null;
     } catch (e) {
       this.log("getCognitiveState failed", e);
       return null;
@@ -533,6 +545,67 @@ export class FirestoreUserStoreImpl implements FirestoreUserStore {
     } catch (e) {
       this.log("setTemporalState failed", e);
       return false;
+    }
+  }
+
+  // ── Phase 34 generic durable records (plans/executions/observations) ──
+
+  private docFor(uid: string, collection: "plans" | "executions" | "observations", id: string): never {
+    assertSafeUid(uid);
+    if (!id || id.includes("/") || id.length > 200) throw new Error("invalid record id");
+    return this.db.doc(`users/${uid}/${collection}/${id}`) as never;
+  }
+
+  async getUserDoc(uid: string, collection: "plans" | "executions" | "observations", id: string): Promise<Record<string, unknown> | null> {
+    assertSafeUid(uid);
+    try {
+      const snap = await (this.docFor(uid, collection, id) as any).get();
+      if (!snap.exists) return null;
+      const data = snap.data() as Record<string, unknown> | undefined;
+      if (!data) return null;
+      return data;
+    } catch (e) {
+      this.log("getUserDoc failed", e);
+      return null;
+    }
+  }
+
+  async setUserDoc(uid: string, collection: "plans" | "executions" | "observations", id: string, data: Record<string, unknown>): Promise<boolean> {
+    assertSafeUid(uid);
+    if (!data) return false;
+    try {
+      await (this.docFor(uid, collection, id) as any).set(data);
+      return true;
+    } catch (e) {
+      this.log("setUserDoc failed", e);
+      return false;
+    }
+  }
+
+  async deleteUserDoc(uid: string, collection: "plans" | "executions" | "observations", id: string): Promise<boolean> {
+    assertSafeUid(uid);
+    try {
+      await (this.docFor(uid, collection, id) as any).delete();
+      return true;
+    } catch (e) {
+      this.log("deleteUserDoc failed", e);
+      return false;
+    }
+  }
+
+  async listUserDocs(uid: string, collection: "plans" | "executions" | "observations"): Promise<Array<{ id: string; data: Record<string, unknown> }> | null> {
+    assertSafeUid(uid);
+    try {
+      const ids = await this.listDocIds(this.db.collection(`users/${uid}/${collection}`));
+      const out: Array<{ id: string; data: Record<string, unknown> }> = [];
+      for (const id of ids) {
+        const snap = await (this.docFor(uid, collection, id) as any).get();
+        if (snap.exists) out.push({ id, data: snap.data() as Record<string, unknown> });
+      }
+      return out;
+    } catch (e) {
+      this.log("listUserDocs failed", e);
+      return null;
     }
   }
 

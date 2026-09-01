@@ -1,6 +1,7 @@
 export interface Memory {
   id: string;
-  layer: "working" | "episodic" | "semantic" | "user_model" | "procedural";
+  /** UserModel is derived from semantic evidence; it is not a memory layer. */
+  layer: "working" | "episodic" | "semantic" | "procedural";
   category: "identity" | "preference" | "goal" | "project" | "relationship" | "emotional" | "behavior" | "concept" | "fact" | "strategy" | "workflow" | "skill";
   text: string;
   createdAt: string;

@@ -3,6 +3,8 @@ import { MemoryCategory } from "../lib/memoryTypes";
 
 interface UseVoiceMemoryOptions {
   userCaption: string;
+  /** False for participant/unknown speech. Defaults true for legacy typed/single-user callers. */
+  memoryEligible?: boolean;
   onAddMemory: (category: MemoryCategory, text: string) => Promise<void> | void;
   debounceMs?: number;
 }
@@ -146,6 +148,7 @@ function cleanMemoryContent(raw: string): string {
  */
 export function useVoiceMemory({
   userCaption,
+  memoryEligible = true,
   onAddMemory,
   debounceMs = 600
 }: UseVoiceMemoryOptions) {
@@ -167,7 +170,7 @@ export function useVoiceMemory({
 
   // Keep track of recent utterance segments to support multi-part speech
   useEffect(() => {
-    if (userCaption && userCaption.trim().length > 0) {
+    if (memoryEligible && userCaption && userCaption.trim().length > 0) {
       const trimmed = userCaption.trim();
       const list = recentUtterancesRef.current;
       if (list[list.length - 1] !== trimmed) {
@@ -175,7 +178,7 @@ export function useVoiceMemory({
         if (list.length > 5) list.shift();
       }
     }
-  }, [userCaption]);
+  }, [userCaption, memoryEligible]);
 
   const processTranscription = useCallback((text: string) => {
     if (!text || text.trim().length < 4) return;
@@ -251,7 +254,7 @@ export function useVoiceMemory({
   }, [onAddMemory]);
 
   useEffect(() => {
-    if (!userCaption) return;
+    if (!memoryEligible || !userCaption) return;
 
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -266,7 +269,7 @@ export function useVoiceMemory({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [userCaption, debounceMs, processTranscription]);
+  }, [userCaption, memoryEligible, debounceMs, processTranscription]);
 
   const clearNotification = useCallback(() => {
     setLastCaptured(null);

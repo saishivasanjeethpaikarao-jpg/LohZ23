@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ModelGateway } from "./gateway";
 import { GeminiAdapter } from "./geminiAdapter";
 import { NvidiaAdapter } from "./nvidiaAdapter";
-import { GenerateRequest, ModelCapability } from "./types";
+import { DEFAULT_GATEWAY_CONFIG, GenerateRequest, ModelCapability } from "./types";
 
 vi.mock("../../credentialStore", () => ({
   credentialStore: {
@@ -202,8 +202,9 @@ describe("ModelGateway", () => {
         // expected
       }
       const log = gateway.getCostLog();
-      expect(log).toHaveLength(1);
+      expect(log).toHaveLength(2); // primary and fallback failures are both attributable
       expect(log[0].success).toBe(false);
+      expect(log[1]).toMatchObject({ success: false, fallbackUsed: true });
     });
 
     it("should record fallback usage", async () => {
@@ -247,6 +248,20 @@ describe("ModelGateway", () => {
       expect(summary.byProvider.gemini.calls).toBe(2);
       expect(summary.byCapability.text_generation.calls).toBe(2);
     });
+
+    it("passively emits real provider outcomes without initiating another call", async () => {
+      const gemini = gateway.getProvider("gemini")!;
+      vi.spyOn(gemini, "generate").mockResolvedValue({
+        text: "result", provider: "gemini", model: "gemini-3.5-flash",
+        capability: "text_generation", latencyMs: 7,
+      });
+      const observed: Array<{ success: boolean; userId?: string }> = [];
+      const unsubscribe = gateway.onOutcome((entry) => observed.push({ success: entry.success, userId: entry.userId }));
+      await gateway.generate({ ...makeRequest("text_generation"), userId: "u1" });
+      unsubscribe();
+      expect(observed).toEqual([{ success: true, userId: "u1" }]);
+      expect(gemini.generate).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("health check", () => {
@@ -280,11 +295,31 @@ describe("ModelGateway", () => {
   });
 
   describe("unsupported capability", () => {
-    it("should return empty result from nvidia for audio", async () => {
+    it("should reject direct unsupported provider capability calls", async () => {
       const nvidia = gateway.getProvider("nvidia")!;
-      const result = await nvidia.generate(makeRequest("audio"));
-      expect(result.text).toBe("");
-      expect(result.provider).toBe("nvidia");
+      await expect(nvidia.generate(makeRequest("audio"))).rejects.toThrow("does not support");
     });
+  });
+
+  it("preserves default routes when only one routing rule is overridden", () => {
+    const custom = new ModelGateway({ routing: { reasoning: { primary: "gemini" } } });
+    expect(custom.getConfig().routing.text_generation).toEqual(DEFAULT_GATEWAY_CONFIG.routing.text_generation);
+  });
+
+  it("records both failures when primary and fallback fail", async () => {
+    const gemini = gateway.getProvider("gemini")!;
+    const nvidia = gateway.getProvider("nvidia")!;
+    vi.spyOn(gemini, "generate").mockRejectedValue(new Error("primary down"));
+    vi.spyOn(nvidia, "generate").mockRejectedValue(new Error("fallback down"));
+    await expect(gateway.generate(makeRequest("text_generation"))).rejects.toThrow("fallback down");
+    expect(gateway.getCostLog().map((entry) => [entry.success, entry.fallbackUsed])).toEqual([[false, false], [false, true]]);
+  });
+
+  it("treats empty provider output as malformed and falls back", async () => {
+    const gemini = gateway.getProvider("gemini")!;
+    const nvidia = gateway.getProvider("nvidia")!;
+    vi.spyOn(gemini, "generate").mockResolvedValue({ text: "", provider: "gemini", model: "g", capability: "text_generation", latencyMs: 1 });
+    vi.spyOn(nvidia, "generate").mockResolvedValue({ text: "valid", provider: "nvidia", model: "n", capability: "text_generation", latencyMs: 1 });
+    expect((await gateway.generate(makeRequest("text_generation"))).text).toBe("valid");
   });
 });

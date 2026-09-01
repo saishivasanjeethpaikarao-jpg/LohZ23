@@ -11,6 +11,7 @@
  * it never executes tools directly.
  */
 import type { RoutingResult, RiskLevel } from "../router/types";
+import type { ConversationMode, ConversationSpeakerRole, SpeakerConfidenceKind, SpeakerId } from "../conversation/types";
 
 export type CognitiveAction =
   | "direct_tool"
@@ -54,7 +55,23 @@ export const FRAME_LIMITS = {
   snippetChars: 400,
   preferenceChars: 200,
   evidenceTokens: 4,
+  speakerTurns: 12,
 } as const;
+
+export interface FrameConversationContext {
+  conversationMode: ConversationMode;
+  participantCount: number;
+  activeSpeaker: { speakerId: SpeakerId; role: ConversationSpeakerRole } | null;
+  recentSpeakerTurns: Array<{
+    speakerId: SpeakerId;
+    role: ConversationSpeakerRole;
+    text: string;
+    at: string;
+  }>;
+  speakerConfidence: { value: number; kind: SpeakerConfidenceKind; level: "high" | "medium" | "low" };
+  overlapDetected: boolean;
+  addressedToLohz: boolean | null;
+}
 
 export interface FrameMemory {
   id: string;
@@ -91,8 +108,19 @@ export interface TimeContext {
  * Phase 33 seam — full world model arrives later. For now this is an
  * interface over externally supplied, bounded assertions only.
  */
+export interface FrameWorldAssertion {
+  id: string;
+  entity: string;
+  relation: string;
+  value: string | number | boolean | null;
+  observedAt: number;
+  confidence: number;
+  source: string;
+  status: "active" | "stale";
+}
+
 export interface WorldAssertionSource {
-  getAssertions(uid: string, limit: number): Promise<string[]>;
+  getAssertions(uid: string, query: string, limit: number): Promise<FrameWorldAssertion[]>;
 }
 
 export interface LohzCapabilitySnapshot {
@@ -126,7 +154,8 @@ export interface SituationFrame {
   activeGoals: FrameGoal[];
   relevantMemories: FrameMemory[];
   relevantUserPreferences: Record<string, string>;
-  relevantWorldAssertions: string[];
+  relevantWorldAssertions: FrameWorldAssertion[];
+  conversationContext: FrameConversationContext | null;
 
   temporalContext: {
     recentImportantEvents: FrameEvent[];

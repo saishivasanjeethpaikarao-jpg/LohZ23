@@ -1,165 +1,142 @@
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
-// Encryption key file and credentials file
-const KEY_FILE = path.resolve(process.cwd(), '.credential_store_key');
-const CREDENTIALS_FILE = path.resolve(process.cwd(), '.credentials.enc');
+interface EncryptedCredential {
+  iv: string;
+  encryptedData: string;
+  authTag: string;
+}
+type CredentialFile = Record<string, EncryptedCredential>;
 
-/**
- * Generates a random 256-bit encryption key and stores it in KEY_FILE.
- * If the key file already exists, it is read and returned.
- * @returns {Promise<Buffer>} The encryption key as a Buffer.
- */
-async function getOrCreateEncryptionKey(): Promise<Buffer> {
-  if (fs.existsSync(KEY_FILE)) {
-    const keyData = fs.readFileSync(KEY_FILE);
-    return keyData;
-  } else {
-    const key = crypto.randomBytes(32); // 256-bit key
-    fs.writeFileSync(KEY_FILE, key, { encoding: 'binary' });
-    return key;
+export interface CredentialStoreOptions {
+  keyFile?: string;
+  credentialsFile?: string;
+}
+
+function validProvider(provider: string): boolean {
+  return /^[a-z0-9-]{1,32}$/.test(provider);
+}
+
+function encrypt(key: Buffer, value: string): EncryptedCredential {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encryptedData = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return { iv: iv.toString("base64"), encryptedData: encryptedData.toString("base64"), authTag: cipher.getAuthTag().toString("base64") };
+}
+
+function decrypt(key: Buffer, value: EncryptedCredential): string {
+  if (!value || typeof value.iv !== "string" || typeof value.encryptedData !== "string" || typeof value.authTag !== "string") {
+    throw new Error("Credential store record is malformed");
   }
-}
-
-/**
- * Encrypts a value using AES-256-GCM with a random IV.
- * @param {Buffer} key - The encryption key (32 bytes).
- * @param {string} value - The value to encrypt.
- * @returns {{ iv: Buffer; encryptedData: Buffer; authTag: Buffer }} The encrypted data.
- */
-function encrypt(key: Buffer, value: string): { iv: Buffer; encryptedData: Buffer; authTag: Buffer } {
-  const iv = crypto.randomBytes(12); // GCM recommended IV length
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const encryptedData = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return { iv, encryptedData, authTag };
-}
-
-/**
- * Decrypts a value using AES-256-GCM.
- * @param {Buffer} key - The encryption key (32 bytes).
- * @param {Buffer} iv - The initialization vector (12 bytes).
- * @param {Buffer} encryptedData - The encrypted data.
- * @param {Buffer} authTag - The authentication tag.
- * @returns {string} The decrypted value.
- */
-function decrypt(key: Buffer, iv: Buffer, encryptedData: Buffer, authTag: Buffer): string {
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
-  return decrypted.toString('utf8');
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(value.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(value.authTag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(value.encryptedData, "base64")), decipher.final()]).toString("utf8");
 }
 
 export class CredentialStore {
   private key: Buffer | null = null;
+  private initWork: Promise<void> | null = null;
+  private mutations: Promise<void> = Promise.resolve();
+  private readonly keyFile: string;
+  private readonly credentialsFile: string;
+
+  constructor(opts: CredentialStoreOptions = {}) {
+    this.keyFile = path.resolve(opts.keyFile ?? path.join(process.cwd(), ".credential_store_key"));
+    this.credentialsFile = path.resolve(opts.credentialsFile ?? path.join(process.cwd(), ".credentials.enc"));
+  }
 
   async init(): Promise<void> {
     if (this.key) return;
-    this.key = await getOrCreateEncryptionKey();
-  }
-
-/**
-   * Stores a credential for the given provider.
-   * @param {string} provider - The provider identifier (e.g., 'gemini').
-   * @param {string} value - The credential value (e.g., API key).
-   * @returns {Promise<void>}
-   */
-  async setCredential(provider: string, value: string): Promise<void> {
-    await this.init();
-    const { iv, encryptedData, authTag } = encrypt(this.key, value);
-    // Read existing credentials
-    // JSON file stores everything as base64 strings
-    let credentials: { [provider: string]: { iv: string; encryptedData: string; authTag: string } } = {};
-    if (fs.existsSync(CREDENTIALS_FILE)) {
-      const data = fs.readFileSync(CREDENTIALS_FILE);
-      credentials = JSON.parse(data.toString());
-    }
-    // Store the new credential (already in base64 string format)
-    credentials[provider] = {
-      iv: iv.toString('base64'),
-      encryptedData: encryptedData.toString('base64'),
-      authTag: authTag.toString('base64')
-    };
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
-  }
-
-  /**
-   * Retrieves a credential for the given provider.
-   * First checks the secure store, then falls back to environment variable.
-   * @param {string} provider - The provider identifier (e.g., 'gemini').
-   * @returns {Promise<string | null>} The credential value or null if not found.
-   */
-  async getCredential(provider: string): Promise<string | null> {
-    await this.init();
-    // Check secure store
-    if (fs.existsSync(CREDENTIALS_FILE)) {
-      const data = fs.readFileSync(CREDENTIALS_FILE);
-      let credentials: { [provider: string]: { iv: string; encryptedData: string; authTag: string } } = {};
-      try {
-        credentials = JSON.parse(data.toString());
-      } catch (e) {
-        // If the file is corrupt, we treat as empty
-        credentials = {};
-      }
-      if (provider in credentials) {
-        const cred = credentials[provider];
-        try {
-          const decrypted = decrypt(
-            this.key,
-            Buffer.from(cred.iv, 'base64'),
-            Buffer.from(cred.encryptedData, 'base64'),
-            Buffer.from(cred.authTag, 'base64')
-          );
-          return decrypted;
-        } catch (e) {
-          // If decryption fails, we treat as missing
-          return null;
+    if (!this.initWork) {
+      this.initWork = Promise.resolve().then(() => {
+        fs.mkdirSync(path.dirname(this.keyFile), { recursive: true });
+        let key: Buffer;
+        if (fs.existsSync(this.keyFile)) {
+          key = fs.readFileSync(this.keyFile);
+        } else {
+          key = crypto.randomBytes(32);
+          try {
+            fs.writeFileSync(this.keyFile, key, { flag: "wx", mode: 0o600 });
+          } catch (error: any) {
+            if (error?.code !== "EEXIST") throw error;
+            key = fs.readFileSync(this.keyFile);
+          }
         }
-      }
+        if (key.length !== 32) throw new Error("Credential encryption key must be exactly 32 bytes");
+        try { fs.chmodSync(this.keyFile, 0o600); } catch { /* Windows ACLs differ */ }
+        this.key = key;
+      }).finally(() => { this.initWork = null; });
     }
-    // Fallback to environment variable
-    // Convert provider ID to environment variable name: provider in uppercase, replace hyphens with underscores, append _API_KEY
-    const envVarName = `${provider.toUpperCase().replace(/-/g, '_')}_API_KEY`;
-    const envValue = process.env[envVarName];
-    if (envValue !== undefined && envValue !== null) {
-      return envValue;
-    }
-    return null;
+    await this.initWork;
   }
 
-  /**
-   * Deletes a credential for the given provider.
-   * @param {string} provider - The provider identifier (e.g., 'gemini').
-   * @returns {Promise<void>}
-   */
-  async deleteCredential(provider: string): Promise<void> {
-    await this.init();
-    if (!fs.existsSync(CREDENTIALS_FILE)) {
-      return;
-    }
-    const data = fs.readFileSync(CREDENTIALS_FILE);
-    let credentials: { [provider: string]: { iv: string; encryptedData: string; authTag: string } } = {};
+  private assertProvider(provider: string): void {
+    if (!validProvider(provider)) throw new Error("Invalid credential provider identifier");
+  }
+
+  private readFile(): CredentialFile {
+    if (!fs.existsSync(this.credentialsFile)) return {};
+    const parsed = JSON.parse(fs.readFileSync(this.credentialsFile, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Credential store is malformed");
+    return parsed as CredentialFile;
+  }
+
+  private writeFile(credentials: CredentialFile): void {
+    fs.mkdirSync(path.dirname(this.credentialsFile), { recursive: true });
+    const temp = `${this.credentialsFile}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
     try {
-      credentials = JSON.parse(data.toString());
-    } catch (e) {
-      // If the file is corrupt, we treat as empty
-      credentials = {};
+      fs.writeFileSync(temp, JSON.stringify(credentials, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+      fs.renameSync(temp, this.credentialsFile);
+      try { fs.chmodSync(this.credentialsFile, 0o600); } catch { /* Windows ACLs differ */ }
+    } finally {
+      try { if (fs.existsSync(temp)) fs.unlinkSync(temp); } catch { /* best effort */ }
     }
-    delete credentials[provider];
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
   }
 
-  /**
-   * Checks if a credential exists for the given provider (either in secure store or environment variable).
-   * @param {string} provider - The provider identifier (e.g., 'gemini').
-   * @returns {Promise<boolean>} True if the credential exists, false otherwise.
-   */
+  private enqueue<T>(fn: () => Promise<T> | T): Promise<T> {
+    const work = this.mutations.then(fn, fn);
+    this.mutations = work.then(() => undefined, () => undefined);
+    return work;
+  }
+
+  async setCredential(provider: string, value: string): Promise<void> {
+    this.assertProvider(provider);
+    if (typeof value !== "string" || !value.trim() || Buffer.byteLength(value, "utf8") > 64 * 1024) {
+      throw new Error("Credential value is empty or too large");
+    }
+    await this.enqueue(async () => {
+      await this.init();
+      const credentials = this.readFile();
+      credentials[provider] = encrypt(this.key!, value);
+      this.writeFile(credentials);
+    });
+  }
+
+  async getCredential(provider: string): Promise<string | null> {
+    this.assertProvider(provider);
+    await this.mutations;
+    await this.init();
+    const credentials = this.readFile();
+    if (provider in credentials) return decrypt(this.key!, credentials[provider]);
+    const envVarName = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+    return process.env[envVarName] ?? null;
+  }
+
+  async deleteCredential(provider: string): Promise<void> {
+    this.assertProvider(provider);
+    await this.enqueue(async () => {
+      await this.init();
+      const credentials = this.readFile();
+      if (!(provider in credentials)) return;
+      delete credentials[provider];
+      this.writeFile(credentials);
+    });
+  }
+
   async hasCredential(provider: string): Promise<boolean> {
-    const cred = await this.getCredential(provider);
-    return cred !== null;
+    return (await this.getCredential(provider)) !== null;
   }
 }
 
-// We'll export a singleton instance
 export const credentialStore = new CredentialStore();

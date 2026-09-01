@@ -34,6 +34,7 @@ interface HarnessOpts {
   runnerBehavior?: "ok" | "fail_permanent" | "timeout" | "transient_twice";
   modelVerifier?: (uid: string, step: PlanStep, note: string) => Promise<"VERIFIED" | "FAILED" | "INCONCLUSIVE">;
   memory?: (uid: string, text: string) => void;
+  worldState?: { recordVerifiedObservation: (uid: string, step: PlanStep, observation: import("./types").Observation) => Promise<boolean> };
 }
 
 function buildObserver(opts: HarnessOpts = {}) {
@@ -76,6 +77,7 @@ function buildObserver(opts: HarnessOpts = {}) {
     probeRunner: runner as never,
     ...(opts.modelVerifier ? { modelVerifier: opts.modelVerifier } : {}),
     ...(opts.memory ? { memoryCandidate: opts.memory } : {}),
+    ...(opts.worldState ? { worldState: opts.worldState } : {}),
   });
   return { store, events, runner, toolRuns, stepExecutor, observer, transientCountRef: () => transientCount };
 }
@@ -156,6 +158,17 @@ describe("observation store bounds + sanitization", () => {
 });
 
 describe("observer verdicts + recovery pipeline", () => {
+  it("writes world state only after a VERIFIED observation is persisted", async () => {
+    const recordVerifiedObservation = vi.fn(async () => true);
+    const verified = buildObserver({ probeWindows: ["Chrome - Home"], worldState: { recordVerifiedObservation } });
+    await verified.observer.verifyExecuted("u1", "p1", "rq-world", mkStep({ requiredTool: "openApp", arguments: { name: "chrome" } }), { ok: true, resultRaw: {} });
+    expect(recordVerifiedObservation).toHaveBeenCalledTimes(1);
+
+    const inconclusive = buildObserver({ worldState: { recordVerifiedObservation } });
+    await inconclusive.observer.verifyExecuted("u1", "p1", "rq-world-2", mkStep({ requiredTool: "openUrl", arguments: { url: "https://example.com" } }), { ok: true, resultRaw: {} });
+    expect(recordVerifiedObservation).toHaveBeenCalledTimes(1);
+  });
+
   it("TEST B: tool success but window absent -> verification FAILED, step NOT completed, recovery bounded", async () => {
     const h = buildObserver({ probeWindows: ["Notepad"], runnerBehavior: "ok" });
     const step = mkStep({ requiredTool: "openApp", arguments: { name: "chrome" }, retryPolicy: { maxRetries: 1 } });
@@ -188,8 +201,8 @@ describe("observer verdicts + recovery pipeline", () => {
     const step = mkStep({ requiredTool: "openApp", arguments: { name: "chrome" }, retryPolicy: { maxRetries: 2 } });
     const rec = await h.observer.executeVerifiedStep("u1", "p1", "rq-D", step, h.stepExecutor);
     expect(rec.status).toBe("failed");
-    // Bounded: initial(<=3 attempts incl. executor retries) + <=2 recovery cycles of <=3.
-    expect(rec.attempts).toBeLessThanOrEqual(9);
+    expect(rec.failure?.code).toBe("ambiguous_timeout");
+    expect(h.toolRuns.filter((t) => t.tool === "openApp")).toHaveLength(1);
     expect(h.events.filter((e) => e.type === "recovery_started").length).toBeLessThanOrEqual(RECOVERY_LIMITS.maxRecoveryAttempts);
   });
 

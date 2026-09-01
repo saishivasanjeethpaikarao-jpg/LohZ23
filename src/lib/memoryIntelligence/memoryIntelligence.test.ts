@@ -25,6 +25,22 @@ async function cleanup(): Promise<void> {
 describe("memory intelligence pipeline (FileStore)", () => {
   beforeEach(cleanup);
 
+  it("fails closed and never overwrites when the existing memory load is unavailable", async () => {
+    let saves = 0;
+    const unavailable: MemoryStore = {
+      load: async () => null,
+      save: async () => { saves++; return true; },
+      add: async () => false, delete: async () => false,
+      isHealthy: async () => false, backendName: () => "unavailable",
+    };
+    const result = await new MemoryIntelligenceService(unavailable).process({
+      userId: UID, turns: [{ role: "user", content: "My name is Priya Sharma" }],
+    });
+    expect(result.persistenceVerified).toBe(false);
+    expect(result.failures[0]).toContain("refusing to overwrite");
+    expect(saves).toBe(0);
+  });
+
   it("extracts, persists, and re-loads real memories to the store", async () => {
     const store = new LocalFileMemoryStore(TEST_DIR);
     const svc = new MemoryIntelligenceService(store);

@@ -69,6 +69,23 @@ export interface PlannerDeps {
     }) => Promise<{ text?: string; provider?: string; model?: string }>;
   };
   contextProviders?: ContextProviders;
+  /**
+   * Phase 38 — skill selection seam. When provided, the planner asks
+   * this before reaching the model-assisted stage. Returning null is a
+   * signal to fall through; returning a plan object hands a fully
+   * materialized plan (with skill provenance in its constraints) to the
+   * same `finalize` gate every other plan must pass.
+   *
+   * Selection is NOT authorization: the plan still flows through
+   * `evaluateExecutionPolicy` and the existing observed-execution engine.
+   */
+  skills?: {
+    matchPlan: (uid: string, objective: string) => Promise<{
+      plan: Plan;
+      skillId: string;
+      version: number;
+    } | null>;
+  };
   now?: () => number;
 }
 
@@ -158,7 +175,20 @@ export class HierarchicalPlanner {
       steps.every((s) => s.intent !== "reason" || /verify|check|explain/i.test(s.title));
 
     if (!meaningful) {
-      // â”€â”€ Stage 2: model-assisted (budget-capped) â”€â”€
+      // ── Phase 38: skill selection seam (deterministic, 0 model calls) ──
+      if (this.deps.skills) {
+        try {
+          const matched = await this.deps.skills.matchPlan(authenticatedUserId, objective);
+          if (matched) {
+            matched.plan.modelCallsUsed = 0;
+            return await this.finalize(matched.plan);
+          }
+        } catch {
+          /* skill selection failure falls through to normal planning */
+        }
+      }
+
+      // ── Stage 2: model-assisted (budget-capped) ──
       if (!this.deps.gateway) {
         return {
           ok: false,

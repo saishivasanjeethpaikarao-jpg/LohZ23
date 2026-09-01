@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   X,
   Brain,
@@ -24,11 +24,13 @@ import {
   LogIn,
   LogOut,
   Mail,
+  Activity,
 } from "lucide-react";
 import { AgentStatus } from "../../windows-agent/types";
 import { motion, AnimatePresence } from "motion/react";
 import React from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { HealthCenter } from "./HealthCenter";
 
 type Provider = "gemini" | "nvidia" | "groq" | "openai" | "anthropic";
 
@@ -55,7 +57,7 @@ interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
   agentStatus: AgentStatus | null;
-  initialTab?: "providers" | "agent" | "voice" | "general" | "security" | "account";
+  initialTab?: "health" | "providers" | "agent" | "voice" | "general" | "security" | "account";
   proactiveSpeechEnabled?: boolean;
   onProactiveSpeechChange?: (enabled: boolean) => void;
 }
@@ -69,9 +71,16 @@ function createInitialProviderStates(): Record<Provider, ProviderStatus> {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus, initialTab, proactiveSpeechEnabled = true, onProactiveSpeechChange }) => {
-  const { user, signInWithGoogle, signOut: authSignOut } = useAuth();
+  const { user, signInWithGoogle, signOut: authSignOut, getIdToken } = useAuth();
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    try {
+      const token = await getIdToken();
+      if (token) return { Authorization: `Bearer ${token}` };
+    } catch { /* fail closed below */ }
+    return import.meta.env.DEV ? { "X-LOHZ-Dev-Uid": "local-development" } : {};
+  }, [getIdToken]);
   const [providerStates, setProviderStates] = useState<Record<Provider, ProviderStatus>>(createInitialProviderStates());
-  const [activeSection, setActiveSection] = useState<"providers" | "agent" | "voice" | "general" | "security" | "account">(initialTab || "providers");
+  const [activeSection, setActiveSection] = useState<"health" | "providers" | "agent" | "voice" | "general" | "security" | "account">(initialTab || "providers");
 
   useEffect(() => {
     if (initialTab) setActiveSection(initialTab);
@@ -81,8 +90,10 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
     if (!isOpen) return;
     const loadStatus = async () => {
       try {
-        const res = await fetch("/api/credentials/status");
+        const headers = await getAuthHeaders();
+        const res = await fetch("/api/credentials/status", { headers });
         const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || `Credential status failed (${res.status})`);
         setProviderStates((prev) => {
           const next = { ...prev };
           Object.entries(data).forEach(([provider, status]: [string, any]) => {
@@ -97,7 +108,7 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
       }
     };
     loadStatus();
-  }, [isOpen]);
+  }, [isOpen, getAuthHeaders]);
 
   const handleSave = async (provider: Provider) => {
     const state = providerStates[provider];
@@ -107,9 +118,10 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
     }
     setProviderStates((p) => ({ ...p, [provider]: { ...p[provider], saving: true, testResult: null } }));
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`/api/credentials/${provider}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ value: state.apiKey }),
       });
       const data = await res.json();
@@ -134,7 +146,8 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
     }
     setProviderStates((p) => ({ ...p, [provider]: { ...p[provider], testing: true, testResult: null } }));
     try {
-      const res = await fetch(`/api/credentials/${provider}/test`, { method: "POST", headers: { "Content-Type": "application/json" } });
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/credentials/${provider}/test`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders } });
       const data = await res.json();
       setProviderStates((p) => ({
         ...p,
@@ -148,7 +161,8 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
   const handleRemove = async (provider: Provider) => {
     setProviderStates((p) => ({ ...p, [provider]: { ...p[provider], saving: true, testResult: null } }));
     try {
-      const res = await fetch(`/api/credentials/${provider}`, { method: "DELETE" });
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/credentials/${provider}`, { method: "DELETE", headers: authHeaders });
       const data = await res.json();
       if (data.success) {
         setProviderStates((p) => ({ ...p, [provider]: { ...p[provider], configured: false, saving: false, apiKey: "", testResult: { success: true, message: data.message } } }));
@@ -175,6 +189,7 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
 
   const navItems: { id: typeof activeSection; label: string; icon: any }[] = [
     { id: "account", label: "Account", icon: User },
+    { id: "health", label: "System Health", icon: Activity },
     { id: "providers", label: "AI Providers", icon: KeyRound },
     { id: "agent", label: "Windows Agent", icon: Monitor },
     { id: "voice", label: "Voice", icon: Sliders },
@@ -339,6 +354,9 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
                   )}
                 </div>
               )}
+
+              {/* AI PROVIDERS */}
+              {activeSection === "health" && <HealthCenter active={isOpen && activeSection === "health"} />}
 
               {/* AI PROVIDERS */}
               {activeSection === "providers" && (

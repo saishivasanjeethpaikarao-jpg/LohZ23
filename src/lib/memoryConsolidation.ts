@@ -84,9 +84,9 @@ export class MemoryConsolidation {
 
     // Identity facts
     const identityPatterns = [
-      { pattern: /my name is (\w+)/, category: "identity" as MemoryCategory, layer: "user_model" as MemoryLayer },
-      { pattern: /i am (\w+)/, category: "identity" as MemoryCategory, layer: "user_model" as MemoryLayer },
-      { pattern: /i work (?:as|at) ([\w\s]+)/, category: "identity" as MemoryCategory, layer: "user_model" as MemoryLayer },
+      { pattern: /my name is (\w+)/, category: "identity" as MemoryCategory, layer: "semantic" as MemoryLayer },
+      { pattern: /i am (\w+)/, category: "identity" as MemoryCategory, layer: "semantic" as MemoryLayer },
+      { pattern: /i work (?:as|at) ([\w\s]+)/, category: "identity" as MemoryCategory, layer: "semantic" as MemoryLayer },
     ];
 
     // Preference facts

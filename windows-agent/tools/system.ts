@@ -101,14 +101,13 @@ namespace LohzAudio {
 `.trim();
 
 const SCRIPT_PREFIX = `
-$code = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(C_SHARP_VOLUME, "utf-8").toString("base64")}')
+$code = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(C_SHARP_VOLUME, "utf-8").toString("base64")}'))
 Add-Type -TypeDefinition $code -Language CSharp
-`;
+`.trim();
 
 export async function getVolume() {
   const script = `
-$code = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(C_SHARP_VOLUME, "utf-8").toString("base64")}')
-Add-Type -TypeDefinition $code -Language CSharp
+${SCRIPT_PREFIX}
 Write-Output ("OK|" + [LohzAudio.Volume]::Report())
 `.trim();
 
@@ -150,8 +149,7 @@ export async function setVolume(params: Record<string, any>) {
     }
     const scalar = lvl / 100;
     const script = `
-$code = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(C_SHARP_VOLUME, "utf-8").toString("base64")}')
-Add-Type -TypeDefinition $code -Language CSharp
+${SCRIPT_PREFIX}
 [LohzAudio.Volume]::SetScalar(${scalar.toFixed(4)}f)
 Write-Output "OK|set"
 `.trim();
@@ -166,16 +164,8 @@ Write-Output "OK|set"
 
   if (mute !== undefined) {
     const m = Boolean(mute);
-    const script = `
-$code = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(C_SHARP_VOLUME, "utf-8").toString("base64")}')
-Add-Type -TypeDefinition $code -Language CSharp
-[LohzAudio.Volume]::SetMute([bool]$${1 /* dummy to avoid interpolation issues */})
-Write-Output "OK|mute"
-`.trim();
-    // The above has a placeholder issue — rewrite cleanly:
     const cleanScript = `
-$code = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(C_SHARP_VOLUME, "utf-8").toString("base64")}')
-Add-Type -TypeDefinition $code -Language CSharp
+${SCRIPT_PREFIX}
 [LohzAudio.Volume]::SetMute([bool]${m ? "$true" : "$false"})
 Write-Output "OK|mute"
 `.trim();

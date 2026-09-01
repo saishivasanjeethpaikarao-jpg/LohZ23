@@ -57,7 +57,11 @@ async function authenticate(
 ): Promise<void> {
   if (!available) {
     if (allowDevelopmentBypass) {
-      const uid = safeDevelopmentUid(req.header(DEV_UID_HEADER)) ?? "local-development";
+      const uid = safeDevelopmentUid(req.header(DEV_UID_HEADER));
+      if (!uid) {
+        res.status(401).json({ error: `Missing or invalid ${DEV_UID_HEADER} header` });
+        return;
+      }
       req.userId = uid;
       next();
       return;
@@ -107,7 +111,7 @@ export async function verifyToken(token: string): Promise<string | null> {
   if (!firebaseAdminInitialized) {
     if (developmentBypassEnabled()) {
       const devUid = token.startsWith("dev:") ? safeDevelopmentUid(token.slice(4)) : null;
-      return devUid ?? "local-development";
+      return devUid;
     }
     return null;
   }

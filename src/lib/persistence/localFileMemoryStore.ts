@@ -27,6 +27,7 @@ function pathFor(dir: string, uid: string): string {
 
 export class LocalFileMemoryStore implements MemoryStore {
   private dir: string;
+  private mutations = new Map<string, Promise<void>>();
   constructor(dir: string = MEMORY_DIR) {
     this.dir = dir;
   }
@@ -49,7 +50,7 @@ export class LocalFileMemoryStore implements MemoryStore {
     }
   }
 
-  async save(uid: string, memories: Memory[]): Promise<boolean> {
+  private async saveNow(uid: string, memories: Memory[]): Promise<boolean> {
     try {
       await fs.mkdir(this.dir, { recursive: true });
       // Defensive per-user stamp — refuse to persist foreign records.
@@ -65,18 +66,38 @@ export class LocalFileMemoryStore implements MemoryStore {
     }
   }
 
+  private enqueue<T>(uid: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.mutations.get(uid) ?? Promise.resolve();
+    const work = previous.catch(() => undefined).then(fn);
+    const marker = work.then(() => undefined, () => undefined);
+    this.mutations.set(uid, marker);
+    return work.finally(() => {
+      if (this.mutations.get(uid) === marker) this.mutations.delete(uid);
+    });
+  }
+
+  async save(uid: string, memories: Memory[]): Promise<boolean> {
+    return this.enqueue(uid, () => this.saveNow(uid, memories));
+  }
+
   async add(uid: string, memory: Memory): Promise<boolean> {
     if (!memory || memory.metadata.userId !== uid) return false;
-    const existing = (await this.load(uid)) ?? [];
-    if (existing.some((m) => m.id === memory.id)) return true;
-    existing.push(memory);
-    return this.save(uid, existing);
+    return this.enqueue(uid, async () => {
+      const existing = await this.load(uid);
+      if (existing === null) return false;
+      if (existing.some((m) => m.id === memory.id)) return true;
+      existing.push(memory);
+      return this.saveNow(uid, existing);
+    });
   }
 
   async delete(uid: string, memoryId: string): Promise<boolean> {
-    const existing = (await this.load(uid)) ?? [];
-    const next = existing.filter((m) => m.id !== memoryId);
-    return this.save(uid, next);
+    return this.enqueue(uid, async () => {
+      const existing = await this.load(uid);
+      if (existing === null) return false;
+      const next = existing.filter((m) => m.id !== memoryId);
+      return this.saveNow(uid, next);
+    });
   }
 
   async isHealthy(): Promise<boolean> {

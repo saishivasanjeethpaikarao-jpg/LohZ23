@@ -13,6 +13,7 @@ import { resolveToken, safeEqual } from "./auth";
 import { executeTool } from "./toolExecutor";
 import { getAllTools, getRisk } from "./toolRegistry";
 import type { AgentStatus } from "./types";
+import { ExecutionReplayCache } from "./replayCache";
 
 export const AGENT_PORT = Number(process.env.LOHZ_AGENT_PORT) || 3001;
 const AGENT_HOST = "127.0.0.1";
@@ -34,7 +35,12 @@ function bearerAuth(token: string) {
   };
 }
 
-export function createAgentApp(token: string) {
+export function createAgentApp(
+  token: string,
+  deps: { execute?: typeof executeTool; replay?: ExecutionReplayCache<Awaited<ReturnType<typeof executeTool>>> } = {}
+) {
+  const runTool = deps.execute ?? executeTool;
+  const replay = deps.replay ?? new ExecutionReplayCache<Awaited<ReturnType<typeof executeTool>>>();
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "2mb" }));
@@ -57,13 +63,14 @@ export function createAgentApp(token: string) {
   app.post("/execute", bearerAuth(token), async (req, res) => {
     const body = req.body || {};
     const name = typeof body.name === "string" ? body.name : "";
+    const requestId = typeof body.requestId === "string" ? body.requestId : "";
     const params = body.params && typeof body.params === "object" ? body.params : {};
-    if (!name) {
-      res.status(400).json({ success: false, error: { code: "BAD_REQUEST", details: "Missing name." } });
+    if (!name || !requestId) {
+      res.status(400).json({ success: false, error: { code: "BAD_REQUEST", details: "Missing name or requestId." } });
       return;
     }
     try {
-      const result = await executeTool(name, params);
+      const result = await replay.run(requestId, () => runTool(name, params));
       const status = result.success ? 200 : 400;
       res.status(status).json(result);
     } catch (err: any) {
@@ -114,10 +121,23 @@ export interface AgentServerHandle {
 export function startAgentServer(): AgentServerHandle {
   const tokenObj = resolveToken();
   const token = tokenObj.token;
-  const app = createAgentApp(token);
+  const replay = new ExecutionReplayCache<Awaited<ReturnType<typeof executeTool>>>();
+  const app = createAgentApp(token, { replay });
   const server = http.createServer(app);
 
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({
+    server,
+    path: "/ws",
+    maxPayload: 2 * 1024 * 1024,
+    verifyClient: (info, done) => {
+      try {
+        const parsed = new URL(info.req.url || "", `http://${AGENT_HOST}`);
+        done(safeEqual(parsed.searchParams.get("token") || "", token), 401, "Unauthorized");
+      } catch {
+        done(false, 401, "Unauthorized");
+      }
+    },
+  });
 
   const status: AgentStatus = {
     online: true,
@@ -140,15 +160,6 @@ export function startAgentServer(): AgentServerHandle {
   }
 
   wss.on("connection", (socket, req) => {
-    const url = req.url || "";
-    const expected = "/ws?token=" + encodeURIComponent(token);
-    const presentedQuery = url.includes("?token=") ? url.split("?token=")[1] || "" : "";
-    const presented = decodeURIComponent(presentedQuery.split("&")[0] || "");
-    if (!safeEqual(presented, token)) {
-      socket.close(4001, "Unauthorized");
-      return;
-    }
-
     status.connectedClients = wss.clients.size;
     socket.send(JSON.stringify({ type: "status", status }));
 
@@ -166,12 +177,14 @@ export function startAgentServer(): AgentServerHandle {
         const params = parsed.params && typeof parsed.params === "object" ? parsed.params : {};
         const requestId = typeof parsed.requestId === "string" ? parsed.requestId : null;
 
-        if (requestId) {
-          socket.send(JSON.stringify({ type: "ack", requestId }));
+        if (!requestId) {
+          socket.send(JSON.stringify({ type: "error", error: { code: "MISSING_REQUEST_ID" } }));
+          return;
         }
+        socket.send(JSON.stringify({ type: "ack", requestId }));
 
         try {
-          const result = await executeTool(name, params);
+          const result = await replay.run(requestId, () => executeTool(name, params));
           socket.send(
             JSON.stringify({
               type: "result",

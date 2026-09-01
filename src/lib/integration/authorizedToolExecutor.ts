@@ -13,6 +13,7 @@ export interface AuthorizedToolExecutorDeps {
   executionEngine: PlanExecutionEngine;
   hasTool: (toolName: string) => boolean;
   riskForTool: (toolName: string) => "safe" | "low" | "medium" | "high" | "critical";
+  onExecutionComplete?: (userId: string, requestId: string) => Promise<void>;
   now?: () => number;
 }
 
@@ -49,6 +50,9 @@ export function createAuthorizedToolExecutor(deps: AuthorizedToolExecutorDeps): 
     const outcome = await deps.executionEngine.executePlanManaged(directPlan, {
       userId, requestId, confirmed: false,
     });
+    if (["completed", "failed"].includes(outcome.recordStatus) && deps.onExecutionComplete) {
+      try { await deps.onExecutionComplete(userId, requestId); } catch { /* learning never changes execution truth */ }
+    }
     if (outcome.authorization === "REQUIRES_CONFIRMATION") {
       return { ok: false, errorKind: "confirmation_required", result: { requestId, planId: directPlan.id } };
     }

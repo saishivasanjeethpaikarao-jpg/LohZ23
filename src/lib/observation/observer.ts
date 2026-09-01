@@ -18,6 +18,7 @@ import { ruleFor } from "./verificationRules";
 import { PROBE_SAFE_TOOLS, sanitizeEvidence, RECOVERY_LIMITS, OBSERVATION_LIMITS } from "./types";
 import type { Observation, VerificationVerdict } from "./types";
 import type { ObservationStore } from "./observationStore";
+import { isSideEffecting } from "../execution/guards";
 
 export interface ObservationEventEmitter {
   record: (input: {
@@ -40,9 +41,11 @@ export interface ObservationHooksDeps {
   modelVerifier?: (userId: string, step: PlanStep, note: string) =>
     Promise<"VERIFIED" | "FAILED" | "INCONCLUSIVE">;
   memoryCandidate?: (uid: string, text: string) => void;
+  /** Phase 35: verified, persisted observations may update world state. */
+  worldState?: {
+    recordVerifiedObservation: (uid: string, step: PlanStep, observation: Observation) => Promise<boolean>;
+  };
 }
-
-const SIDE_EFFECTING = new Set(["openApp", "closeApp", "setVolume", "clipboardWrite", "createFile", "writeFile", "createFolder", "renameFile"]);
 
 export class ObservationCoordinator {
   constructor(private deps: ObservationHooksDeps) {
@@ -51,6 +54,12 @@ export class ObservationCoordinator {
   }
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
+
+  private async updateWorldState(uid: string, step: PlanStep, observation: Observation, persisted: boolean): Promise<void> {
+    if (!persisted || observation.status !== "verified" || !this.deps.worldState) return;
+    try { await this.deps.worldState.recordVerifiedObservation(uid, step, observation); }
+    catch { /* world-state enrichment is fail-safe and cannot change verification */ }
+  }
 
   private probeArguments(step: PlanStep, probeTool: string): Record<string, unknown> {
     if (probeTool !== "readFile") return {};
@@ -119,6 +128,7 @@ export class ObservationCoordinator {
       "recheck", outcome.observedState, outcome.evidence, outcome.confidence,
       verdict === "VERIFIED" ? "verified" : verdict === "FAILED" ? "contradicted" : "inconclusive");
     const persisted = await this.deps.store.add(userId, requestId, obs);
+    await this.updateWorldState(userId, step, obs, persisted);
     return { verdict: persisted ? verdict : "INCONCLUSIVE", observation: obs, persisted };
   }
 
@@ -186,6 +196,7 @@ export class ObservationCoordinator {
       probeData ? "probe" : "tool_result", observedState, evidence, confidence,
       verdict === "VERIFIED" ? "verified" : verdict === "FAILED" ? "contradicted" : "inconclusive");
     const persisted = await this.deps.store.add(userId, requestId, obs);
+    await this.updateWorldState(userId, step, obs, persisted);
     return { verdict: persisted ? verdict : "INCONCLUSIVE", observation: obs, persisted };
   }
 
@@ -224,7 +235,7 @@ export class ObservationCoordinator {
     const cls = classifyFailure(code);
 
     // Idempotent recovery FIRST for side-effecting tools (Section 11/12):
-    if (SIDE_EFFECTING.has(step.requiredTool ?? "")) {
+    if (isSideEffecting(step.requiredTool ?? "")) {
       const recheck = await this.recheckState(userId, planId, requestId, step);
       if (recheck?.verdict === "VERIFIED" && recheck.persisted) {
         first.record.status = "completed";
@@ -232,6 +243,15 @@ export class ObservationCoordinator {
         first.record.observedResult = `state already satisfied (recheck): ${recheck.observation.observedState}`.slice(0, OBSERVATION_LIMITS.observedResultChars);
         await this.emit({ userId, type: "recovery_succeeded", description: `${step.title}: no duplicate action needed` });
         await this.emit({ userId, type: "step_verified", description: `${step.title}: verified via recheck` });
+        return first.record;
+      }
+      if (code === "timeout") {
+        first.record.failure = {
+          code: "ambiguous_timeout",
+          message: "action timed out and state could not be verified; retry suppressed to prevent duplicate effects",
+          retryable: false,
+        };
+        await this.emit({ userId, type: "step_verification_failed", description: `${step.title}: ambiguous timeout` });
         return first.record;
       }
     }
@@ -249,7 +269,7 @@ export class ObservationCoordinator {
     executor: StepExecutor, base: StepExecutionRecord,
     action: "RETRY" | "WAIT_AND_RETRY" | "RECHECK" | "STOP" | "ASK_USER" | "REPLAN" | "ALTERNATIVE_ALLOWED_TOOL"
   ): Promise<StepExecutionRecord> {
-    if (action === "STOP" || action === "ASK_USER" || action === "REPLAN" || action === "ALTERNATIVE_ALLOWED_TOOL") {
+    if (action === "STOP" || action === "ASK_USER" || action === "REPLAN" || action === "ALTERNATIVE_ALLOWED_TOOL" || action === "RECHECK") {
       await this.emit({ userId, type: "step_verification_failed", description: `${step.title}: ${base.failure?.code}` });
       return base;
     }
@@ -293,7 +313,7 @@ export class ObservationCoordinator {
     await this.emit({ userId, type: "step_verification_failed", description: `${step.title}: ${verdict.toLowerCase()}` });
 
     // One bounded RECHECK cycle for side-effecting steps.
-    if (SIDE_EFFECTING.has(step.requiredTool ?? "")) {
+    if (isSideEffecting(step.requiredTool ?? "")) {
       const recheck = await this.recheckState(userId, planId, requestId, step);
       if (recheck?.verdict === "VERIFIED" && recheck.persisted) {
         base.status = "completed";

@@ -27,9 +27,9 @@ function mk(overrides: Partial<Memory["metadata"]> & { layer?: string } = {}): M
 }
 
 describe("decay + archival", () => {
-  it("user_model identity memories never decay to archive", () => {
+  it("stable semantic identity evidence decays slowly without a duplicate user-model layer", () => {
     const old = mk({
-      layer: "user_model",
+      layer: "semantic",
       timestamp: Date.now() - 365 * 86400_000, // 1 year old
       lastReinforced: Date.now() - 365 * 86400_000,
     });
@@ -91,8 +91,9 @@ describe("decay + archival", () => {
 
   it("DEFAULT_DECAY_RULES covers all layers we use", () => {
     const layers = DEFAULT_DECAY_RULES.map((r) => r.layer);
-    for (const l of ["working", "episodic", "semantic", "procedural", "user_model"]) {
+    for (const l of ["working", "episodic", "semantic", "procedural"]) {
       expect(layers).toContain(l);
     }
+    expect(layers).not.toContain("user_model");
   });
 });

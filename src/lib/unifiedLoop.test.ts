@@ -155,11 +155,11 @@ describe("UnifiedCognitiveArchitecture — end-to-end cognitive loop", () => {
       const { loop } = h;
       const memA = makeMemory("userA", "Kaveri prefers concise summaries", {
         category: "preference",
-        layer: "user_model",
+        layer: "semantic",
       });
       const memB = makeMemory("userB", "Bob likes long detailed reports", {
         category: "preference",
-        layer: "user_model",
+        layer: "semantic",
       });
       loop.ingestMemory(memA);
       loop.ingestMemory(memB);

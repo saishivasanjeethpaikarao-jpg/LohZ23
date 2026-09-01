@@ -22,7 +22,6 @@ export const DEFAULT_DECAY_RULES: DecayRule[] = [
   { layer: "episodic",   halflifeDays: 60,   archiveBelow: 0.15 },
   { layer: "semantic",   halflifeDays: 180,  archiveBelow: 0.1 },
   { layer: "procedural", halflifeDays: 90,   archiveBelow: 0.15 },
-  { layer: "user_model", halflifeDays: Infinity, archiveBelow: 0 },
 ];
 
 export interface DecayContext {

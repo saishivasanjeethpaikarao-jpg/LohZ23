@@ -357,6 +357,32 @@ describe("dedup, out-of-order, concurrency, bounded storage", () => {
 });
 
 describe("restart recovery + persistence failure", () => {
+  it("a single flush call drains a mutation that arrives during its save", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const saveStarted = new Promise<void>((resolve) => { started = resolve; });
+    const snapshots: TemporalState[] = [];
+    const service = new TemporalService({
+      load: async () => null,
+      save: async (_uid, state) => {
+        if (snapshots.length === 0) { started(); await gate; }
+        snapshots.push(JSON.parse(JSON.stringify(state)));
+        return true;
+      },
+    });
+    await service.load("u-single", T0);
+    await ev(service, { userId: "u-single", type: "task_started" }, T0);
+    const flush = service.flush("u-single");
+    await saveStarted;
+    await ev(service, { userId: "u-single", type: "task_completed" }, T0 + 1);
+    release();
+    expect(await flush).toBe(true);
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[1].events.map((event) => event.type)).toEqual(["task_started", "task_completed"]);
+    expect(service.hasPending("u-single")).toBe(false);
+  });
+
   it("does not clear a newer mutation that arrives during an in-flight flush", async () => {
     let release!: () => void;
     let started!: () => void;

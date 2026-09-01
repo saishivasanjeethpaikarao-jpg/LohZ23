@@ -11,11 +11,13 @@ import type {
   FrameEvent,
   FrameGoal,
   FrameMemory,
+  FrameWorldAssertion,
   SituationFrame,
 } from "./types";
 import { FRAME_LIMITS } from "./types";
 import { createSituationFrame } from "./situationFrame";
 import type { RoutingResult } from "../router/types";
+import type { ConversationParticipantState, SpeakerAuthorization } from "../conversation/types";
 
 export interface ContextProviders {
   /** Durable memory reader (e.g. MemoryStore.load) — implementer bounds results. */
@@ -32,7 +34,7 @@ export interface ContextProviders {
   /** TemporalService recent-events reader (already bounded by rings). */
   loadRecentEvents?: (uid: string, limit: number) => Promise<FrameEvent[]>;
   /** Phase 33 seam — external assertion source. */
-  worldAssertions?: (uid: string, limit: number) => Promise<string[]>;
+  worldAssertions?: (uid: string, query: string, limit: number) => Promise<FrameWorldAssertion[]>;
 }
 
 function clip(s: unknown, max: number = FRAME_LIMITS.snippetChars): string {
@@ -54,6 +56,14 @@ export interface AssembledContext {
   uncertaintyMissing: string[];
 }
 
+export interface RequestConversationContext {
+  speakerAuthorization: SpeakerAuthorization;
+  conversation?: ConversationParticipantState;
+}
+
+export type CapabilitySource = import("./types").LohzCapabilitySnapshot
+  | ((uid: string) => Promise<import("./types").LohzCapabilitySnapshot>);
+
 /** Relevance filter: keyword overlap with the request, bounded output. */
 function pickRelevantMemories(
   mems: Array<{ id: string; text: string }>,
@@ -73,19 +83,28 @@ function pickRelevantMemories(
 export class ContextAssembler {
   constructor(
     private providers: ContextProviders,
-    private capabilities: import("./types").LohzCapabilitySnapshot
+    private capabilities: CapabilitySource
   ) {}
 
   async assemble(
     userId: string,
     requestId: string,
     classification: Pick<RoutingResult, "intent" | "confidence" | "riskLevel" | "tier">,
-    rawInput: string
+    rawInput: string,
+    requestContext: RequestConversationContext = { speakerAuthorization: "primary_user" }
   ): Promise<AssembledContext> {
     const nowMs = Date.now();
     const missing: string[] = [];
+    const capabilitySource = this.capabilities;
+    const capabilities: { value: import("./types").LohzCapabilitySnapshot | undefined; ok: boolean } = typeof capabilitySource === "function"
+      ? await safe(() => capabilitySource(userId))
+      : { value: capabilitySource, ok: true };
+    if (!capabilities.ok || !capabilities.value) missing.push("selfModel");
 
-    const um = await safe(() => this.providers.loadUserModel?.(userId));
+    const canReadPrimaryUserContext = requestContext.speakerAuthorization === "primary_user";
+    const um = canReadPrimaryUserContext
+      ? await safe(() => this.providers.loadUserModel?.(userId))
+      : { value: undefined, ok: true };
     if (!um.ok || !um.value) missing.push("userModel");
     const bundle = um.value;
 
@@ -110,7 +129,9 @@ export class ContextAssembler {
       }
     }
 
-    const memsRaw = await safe(() => this.providers.loadMemories?.(userId));
+    const memsRaw = canReadPrimaryUserContext
+      ? await safe(() => this.providers.loadMemories?.(userId))
+      : { value: undefined, ok: true };
     if (!memsRaw.ok) missing.push("memory");
     const memories: FrameMemory[] = pickRelevantMemories(
       Array.isArray(memsRaw.value) ? memsRaw.value : [],
@@ -118,7 +139,9 @@ export class ContextAssembler {
       FRAME_LIMITS.memories
     );
 
-    const goalsRaw = await safe(() => this.providers.loadGoals?.(userId));
+    const goalsRaw = canReadPrimaryUserContext
+      ? await safe(() => this.providers.loadGoals?.(userId))
+      : { value: undefined, ok: true };
     if (!goalsRaw.ok) missing.push("goals");
     const activeGoals: FrameGoal[] = ((goalsRaw.value ?? []) as FrameGoal[])
       .filter((g) => g.status === "active" || g.status === "proposed" || g.status === "progressing")
@@ -126,13 +149,17 @@ export class ContextAssembler {
       .slice(0, FRAME_LIMITS.goals)
       .map((g) => ({ id: g.id, title: clip(g.title), status: g.status, priority: g.priority }));
 
-    const eventsRaw = await safe(() => this.providers.loadRecentEvents?.(userId, FRAME_LIMITS.events));
+    const eventsRaw = canReadPrimaryUserContext
+      ? await safe(() => this.providers.loadRecentEvents?.(userId, FRAME_LIMITS.events))
+      : { value: undefined, ok: true };
     if (!eventsRaw.ok) missing.push("temporal");
     const recentEvents = ((eventsRaw.value ?? []) as FrameEvent[]).slice(0, FRAME_LIMITS.events);
 
-    const waRaw = await safe(() => this.providers.worldAssertions?.(userId, FRAME_LIMITS.topics));
+    const waRaw = canReadPrimaryUserContext
+      ? await safe(() => this.providers.worldAssertions?.(userId, rawInput, FRAME_LIMITS.topics))
+      : { value: undefined, ok: true };
     if (!waRaw.ok) missing.push("worldAssertions");
-    const worldAssertions = ((waRaw.value ?? []) as string[]).map((a) => clip(a));
+    const worldAssertions = ((waRaw.value ?? []) as FrameWorldAssertion[]);
 
     const frame = createSituationFrame(
       {
@@ -146,11 +173,35 @@ export class ContextAssembler {
         relevantMemories: memories,
         relevantUserPreferences,
         worldAssertions,
+        conversationContext: requestContext.conversation
+          ? {
+              conversationMode: requestContext.conversation.conversationMode,
+              participantCount: requestContext.conversation.participantCount,
+              activeSpeaker: requestContext.conversation.activeSpeakerId
+                ? {
+                    speakerId: requestContext.conversation.activeSpeakerId,
+                    role: requestContext.conversation.speakers.find((speaker) => speaker.speakerId === requestContext.conversation!.activeSpeakerId)?.role ?? "unknown",
+                  }
+                : null,
+              recentSpeakerTurns: requestContext.conversation.recentSpeakerTurns.map((turn) => ({
+                speakerId: turn.speakerId,
+                role: turn.speakerRole,
+                text: turn.text,
+                at: turn.endedAt ?? turn.startedAt,
+              })),
+              speakerConfidence: requestContext.conversation.confidence,
+              overlapDetected: requestContext.conversation.overlapDetected,
+              addressedToLohz: requestContext.conversation.recentSpeakerTurns.at(-1)?.addressedToLohz ?? null,
+            }
+          : undefined,
         recentEvents,
         recentTopics: [],
         absenceMs: null,
         currentTaskState,
-        capabilities: this.capabilities,
+        capabilities: capabilities.value ?? {
+          availableTools: [], supportedIntents: [], canPlan: false, canExecute: false,
+          canVerify: false, canRecover: false, canReason: false,
+        },
         uncertainty: {
           missingProviders: missing.slice(0, 6),
           lowConfidenceIntent: classification.confidence < 0.75,

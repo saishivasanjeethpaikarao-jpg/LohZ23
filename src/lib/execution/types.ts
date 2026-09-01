@@ -88,6 +88,8 @@ export interface ExecutionDeps {
   store: import("./persistence").ExecutionStore;
   planStore: import("../planner/planPersistence").PlanStore;
   idempotency?: import("./idempotency").IdempotencyStore;
+  /** Cross-process plan reservation. Required by production composition. */
+  lease?: import("./executionLease").ExecutionLeaseStore;
   toolCatalog: () => string[];
   runner: ToolRunner;
   temporal?: {

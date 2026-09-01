@@ -417,7 +417,7 @@ export class SelfEvaluationEngine {
       candidates.push({
         action: "ADD",
         id: `mem_${Date.now()}_corr`,
-        layer: "user_model",
+        layer: "semantic",
         category: "preference",
         text: `User correction: "${outcome.userFeedback.text}" for task "${outcome.intendedOutcome}"`,
         metadata: {

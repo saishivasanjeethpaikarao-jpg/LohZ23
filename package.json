@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:firestore": "node scripts/run-firestore-emulator-tests.mjs",
     "test:firestore:spec": "vitest run --config vitest.emulator.config.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "benchmark:phase36": "tsx scripts/phase36-benchmark.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

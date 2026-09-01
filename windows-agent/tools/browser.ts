@@ -4,6 +4,7 @@
  * with strict URL validation: only http/https and a real hostname.
  */
 import { spawn } from "child_process";
+import { isPublicHostname } from "../utils/validation";
 
 export async function openUrl(params: Record<string, any>) {
   const raw = String(params.url || "").trim();
@@ -27,7 +28,7 @@ export async function openUrl(params: Record<string, any>) {
     (e as any).code = "URL_PROTOCOL_REJECTED";
     throw e;
   }
-  if (!parsed.hostname || !parsed.hostname.includes(".")) {
+  if (!isPublicHostname(parsed.hostname)) {
     const e = new Error(`URL hostname "${parsed.hostname}" is not a valid public domain.`);
     (e as any).code = "URL_HOSTNAME_INVALID";
     throw e;

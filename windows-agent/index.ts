@@ -3,7 +3,6 @@
  * Run with: npm run agent
  */
 import { startAgentServer, ensureWorkspaceDirs as ensureAgentDirs, AGENT_PORT } from "./server";
-import { resolveToken } from "./auth";
 import { ensureWorkspaceDirs as ensureValidationDirs } from "./utils/validation";
 
 function main() {
@@ -11,7 +10,6 @@ function main() {
   const agentDirs = ensureAgentDirs();
   // Ensure validation dirs (workspace, screenshots)
   ensureValidationDirs();
-  const { token } = resolveToken();
   // eslint-disable-next-line no-console
   console.log(`[LOHZ Windows Agent] Workspace ready.`);
   // eslint-disable-next-line no-console
@@ -20,9 +18,6 @@ function main() {
   console.log(`[LOHZ Windows Agent]   screenshots: ${agentDirs.shotsDir}`);
   // eslint-disable-next-line no-console
   console.log(`[LOHZ Windows Agent]   port:      ${AGENT_PORT}`);
-  // eslint-disable-next-line no-console
-  console.log(`[LOHZ Windows Agent]   token:     ${token.slice(0, 8)}...`);
-
   const handle = startAgentServer();
 
   function shutdown(signal: string) {

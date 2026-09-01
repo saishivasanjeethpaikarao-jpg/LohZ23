@@ -10,6 +10,13 @@
  */
 
 export type LiveState = "disconnected" | "connecting" | "listening" | "speaking";
+import type { ConversationMode, ConversationParticipantState, SpeakerTurn } from "./conversation/types";
+
+export interface LiveTranscriptionEvent {
+  role: "user" | "model";
+  text: string;
+  turn?: SpeakerTurn;
+}
 
 // Agent status from Windows Agent
 import type { AgentStatus } from "../../windows-agent/types";
@@ -106,11 +113,13 @@ export class LohzAudioSession {
   
   // State Callbacks
   private onStateChange: (state: LiveState) => void;
-  private onTranscription: (role: "user" | "model", text: string) => void;
+  private onTranscription: (role: "user" | "model", text: string, turn?: SpeakerTurn) => void;
   private onToolCall: (name: string, args: any, callback: (result: any) => void) => void;
   private onError: (error: string) => void;
   private onMemorySync?: (memories: any[]) => void;
   private onAgentStatus?: (status: AgentStatus) => void;
+  private onConversationState?: (state: ConversationParticipantState) => void;
+  private conversationMode: ConversationMode = "single_user";
   
   // Flag to prevent processing own transcriptions to avoid welcome message loops
   private _processingOwnTranscription = false;
@@ -121,11 +130,12 @@ export class LohzAudioSession {
 
   constructor(handlers: {
     onStateChange: (state: LiveState) => void;
-    onTranscription: (role: "user" | "model", text: string) => void;
+    onTranscription: (role: "user" | "model", text: string, turn?: SpeakerTurn) => void;
     onToolCall: (name: string, args: any, callback: (result: any) => void) => void;
     onError: (error: string) => void;
     onAgentStatus?: (status: AgentStatus) => void;
     onMemorySync?: (memories: any[]) => void;
+    onConversationState?: (state: ConversationParticipantState) => void;
   }) {
     this.onStateChange = handlers.onStateChange;
     this.onTranscription = handlers.onTranscription;
@@ -133,6 +143,7 @@ export class LohzAudioSession {
     this.onError = handlers.onError;
     this.onMemorySync = handlers.onMemorySync;
     this.onAgentStatus = handlers.onAgentStatus;
+    this.onConversationState = handlers.onConversationState;
   }
 
   private setState(state: LiveState) {
@@ -161,6 +172,14 @@ export class LohzAudioSession {
   public sendTextMessage(text: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.currentState !== "disconnected") {
       this.ws.send(JSON.stringify({ type: "text", text }));
+    }
+  }
+
+  /** Group mode changes attribution only; it never changes authentication. */
+  public setConversationMode(mode: ConversationMode) {
+    this.conversationMode = mode;
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: "conversation_mode", mode }));
     }
   }
 
@@ -225,6 +244,7 @@ export class LohzAudioSession {
 
       this.ws.onopen = async () => {
         console.log("[LOHZ] Connected to server side WS bridge");
+        this.ws?.send(JSON.stringify({ type: "conversation_mode", mode: this.conversationMode }));
         try {
           // Guard against early user disconnect during connection setup
           if (!this.isActivated) return;
@@ -385,11 +405,18 @@ export class LohzAudioSession {
             }, 100);
           }
 
+          if (data.type === "conversation_state" && data.state) {
+            this.onConversationState?.(data.state as ConversationParticipantState);
+            return;
+          }
+
 // Handle live captions transcription
 if (data.type === "transcription") {
-  // Prevent processing our own transcriptions as new input to avoid welcome message loops
+  // Server emits only finalized user turns; model text remains caption data.
   if (data.role === "user" && !this._processingOwnTranscription) {
-    this.onTranscription(data.role, data.text);
+    this.onTranscription(data.role, data.text, data.turn);
+  } else if (data.role === "model") {
+    this.onTranscription(data.role, data.text, data.turn);
   }
   // Reset the flag after a short delay
   if (data.role === "model") {

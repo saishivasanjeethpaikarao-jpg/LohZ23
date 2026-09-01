@@ -14,6 +14,7 @@ import { OBSERVATION_LIMITS } from "../observation/types";
 import type { ExecutionStore } from "./persistence";
 import type { ExecutionRecord } from "./types";
 import type { IdempotencyRecord, IdempotencyStore } from "./idempotency";
+import type { ExecutionLease, ExecutionLeaseStore } from "./executionLease";
 
 interface ObservationDocument {
   uid: string;
@@ -39,13 +40,13 @@ function encodedKey(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
 
-export class FirestoreExecutionRepository implements PlanStore, ExecutionStore, ObservationStore, IdempotencyStore {
+export class FirestoreExecutionRepository implements PlanStore, ExecutionStore, ObservationStore, IdempotencyStore, ExecutionLeaseStore {
   constructor(
     private readonly db: FirestoreLike,
     private readonly log: (message: string, error?: unknown) => void = (message, error) => console.warn(`[firestore-execution] ${message}`, error ?? ""),
   ) {}
 
-  private path(uid: string, collection: "plans" | "executions" | "observations" | "idempotency", id: string): string {
+  private path(uid: string, collection: "plans" | "executions" | "observations" | "idempotency" | "leases", id: string): string {
     return `users/${safeSegment(uid, "uid")}/${collection}/${safeSegment(id, "document id")}`;
   }
 
@@ -110,20 +111,27 @@ export class FirestoreExecutionRepository implements PlanStore, ExecutionStore, 
   async saveExecution(record: ExecutionRecord): Promise<boolean> {
     if (!record?.uid || !record?.requestId) return false;
     try {
-      const ref = this.db.doc(this.path(record.uid, "executions", record.requestId));
-      if ((await ref.get()).exists) return false;
-      await ref.set(clone(record));
-      return true;
+      const path = this.path(record.uid, "executions", record.requestId);
+      return await this.db.runTransaction(async (tx) => {
+        if ((await tx.get({ path })).exists) return false;
+        tx.set({ path }, clone(record));
+        return true;
+      });
     } catch (error) { this.log("saveExecution failed", error); return false; }
   }
 
   async updateExecution(record: ExecutionRecord): Promise<boolean> {
     if (!record?.uid || !record?.requestId) return false;
     try {
-      const ref = this.db.doc(this.path(record.uid, "executions", record.requestId));
-      if (!(await ref.get()).exists) return false;
-      await ref.set(clone(record));
-      return true;
+      const path = this.path(record.uid, "executions", record.requestId);
+      return await this.db.runTransaction(async (tx) => {
+        const snap = await tx.get({ path });
+        if (!snap.exists) return false;
+        const current = snap.data() as ExecutionRecord;
+        if (current?.uid !== record.uid || current?.requestId !== record.requestId) return false;
+        tx.set({ path }, clone(record));
+        return true;
+      });
     } catch (error) { this.log("updateExecution failed", error); return false; }
   }
 
@@ -192,8 +200,16 @@ export class FirestoreExecutionRepository implements PlanStore, ExecutionStore, 
   async put(record: IdempotencyRecord): Promise<boolean> {
     if (!record?.uid || !record?.key) return false;
     try {
-      await this.db.doc(this.path(record.uid, "idempotency", encodedKey(record.key))).set(clone(record));
-      return true;
+      const path = this.path(record.uid, "idempotency", encodedKey(record.key));
+      return await this.db.runTransaction(async (tx) => {
+        const snap = await tx.get({ path });
+        if (snap.exists) {
+          const current = snap.data() as IdempotencyRecord;
+          return current?.uid === record.uid && current?.key === record.key && current?.status === "completed";
+        }
+        tx.set({ path }, clone(record));
+        return true;
+      });
     } catch (error) { this.log("put idempotency failed", error); return false; }
   }
 
@@ -204,5 +220,37 @@ export class FirestoreExecutionRepository implements PlanStore, ExecutionStore, 
       await ref.delete();
       return true;
     } catch (error) { this.log("delete idempotency failed", error); return false; }
+  }
+
+  async acquireExecutionLease(uid: string, planId: string, requestId: string, ttlMs: number): Promise<boolean> {
+    if (!Number.isFinite(ttlMs) || ttlMs < 1_000 || ttlMs > 24 * 60 * 60 * 1_000) return false;
+    try {
+      const now = Date.now();
+      const path = this.path(uid, "leases", planId);
+      return await this.db.runTransaction(async (tx) => {
+        const snap = await tx.get({ path });
+        if (snap.exists) {
+          const current = snap.data() as ExecutionLease;
+          if (current?.uid !== uid || current?.planId !== planId) return false;
+          if (current.requestId !== requestId && current.expiresAt > now) return false;
+        }
+        tx.set({ path }, { uid, planId, requestId, acquiredAt: now, expiresAt: now + ttlMs, version: 1 } satisfies ExecutionLease);
+        return true;
+      });
+    } catch (error) { this.log("acquire execution lease failed", error); return false; }
+  }
+
+  async releaseExecutionLease(uid: string, planId: string, requestId: string): Promise<boolean> {
+    try {
+      const path = this.path(uid, "leases", planId);
+      return await this.db.runTransaction(async (tx) => {
+        const snap = await tx.get({ path });
+        if (!snap.exists) return true;
+        const current = snap.data() as ExecutionLease;
+        if (current?.uid !== uid || current?.planId !== planId || current?.requestId !== requestId) return false;
+        tx.delete({ path });
+        return true;
+      });
+    } catch (error) { this.log("release execution lease failed", error); return false; }
   }
 }

@@ -27,6 +27,7 @@ export class InMemoryExecutionStore implements ExecutionStore {
   }
 
   async saveExecution(record: ExecutionRecord): Promise<boolean> {
+    if (this.bucket(record.uid).has(record.requestId)) return false;
     this.bucket(record.uid).set(record.requestId, JSON.parse(JSON.stringify(record)));
     return true;
   }

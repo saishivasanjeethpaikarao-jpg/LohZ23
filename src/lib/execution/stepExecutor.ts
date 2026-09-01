@@ -9,7 +9,7 @@ import {
   EXECUTION_LIMITS,
   StepExecutionRecord,
 } from "./types";
-import { validateToolArgs, toolRisk, isDestructive } from "./guards";
+import { validateToolArgs, toolRisk, isDestructive, isSideEffecting } from "./guards";
 
 export interface StepRunOutcome {
   record: StepExecutionRecord;
@@ -93,12 +93,16 @@ export class StepExecutor {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       rec.attempts = attempt;
       try {
+        let timer: NodeJS.Timeout | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(Object.assign(new Error("step timeout"), { code: "timeout" })), timeoutMs);
+        });
         const result = await Promise.race([
           this.deps.runner(userId, step.requiredTool, step.arguments ?? {}),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(Object.assign(new Error("step timeout"), { code: "timeout" })), timeoutMs)
-          ),
-        ]);
+          timeout,
+        ]).finally(() => {
+          if (timer) clearTimeout(timer);
+        });
         if (result && result.ok) {
           // Bound the stored observation; never invent content.
           let serialized: string | null = null;
@@ -130,6 +134,7 @@ export class StepExecutor {
       const mayRetry =
         attempt < maxAttempts &&
         lastFailure.retryable &&
+        !(lastFailure.code === "timeout" && isSideEffecting(step.requiredTool)) &&
         risk !== "high" &&
         risk !== "medium";
       if (!mayRetry) break;

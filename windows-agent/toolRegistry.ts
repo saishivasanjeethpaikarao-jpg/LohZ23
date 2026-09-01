@@ -6,7 +6,7 @@
  * stay synchronized.
  */
 import type { ParamSchema, RiskLevel, ToolDefinition } from "./types";
-import { closeApp, focusApp, openApp, knownAppNames } from "./tools/applications";
+import { closeApp, focusApp, openApp, knownAppNames, isKnownAppName } from "./tools/applications";
 import { openUrl } from "./tools/browser";
 import {
   createFile,
@@ -24,7 +24,7 @@ import {
 import { clipboardRead, clipboardWrite } from "./tools/clipboard";
 import { takeScreenshot } from "./tools/screenshot";
 import { getSystemInfo, getVolume, setVolume } from "./tools/system";
-import { LIMITS } from "./utils/validation";
+import { isPublicHostname, isSafeBasename, LIMITS } from "./utils/validation";
 
 function stringProp(desc: string, enumValues?: string[]): ParamSchema {
   const p: ParamSchema = { type: "STRING", description: desc };
@@ -58,7 +58,7 @@ const TOOLS: ToolDefinition[] = [
       properties: { name: APP_NAME_PROP },
     },
     validate: (p) => {
-      if (!p.name || typeof p.name !== "string") return { valid: false, error: "name (string) required." };
+      if (!p.name || typeof p.name !== "string" || !isKnownAppName(p.name)) return { valid: false, error: "name must be a known application." };
       return { valid: true };
     },
     execute: openApp,
@@ -72,7 +72,7 @@ const TOOLS: ToolDefinition[] = [
     timeoutMs: 15000,
     parameters: { type: "OBJECT", required: ["name"], properties: { name: APP_NAME_PROP } },
     validate: (p) => {
-      if (!p.name || typeof p.name !== "string") return { valid: false, error: "name (string) required." };
+      if (!p.name || typeof p.name !== "string" || !isKnownAppName(p.name)) return { valid: false, error: "name must be a known application." };
       return { valid: true };
     },
     execute: closeApp,
@@ -85,7 +85,7 @@ const TOOLS: ToolDefinition[] = [
     timeoutMs: 15000,
     parameters: { type: "OBJECT", required: ["name"], properties: { name: APP_NAME_PROP } },
     validate: (p) => {
-      if (!p.name || typeof p.name !== "string") return { valid: false, error: "name (string) required." };
+      if (!p.name || typeof p.name !== "string" || !isKnownAppName(p.name)) return { valid: false, error: "name must be a known application." };
       return { valid: true };
     },
     execute: focusApp,
@@ -182,7 +182,7 @@ const TOOLS: ToolDefinition[] = [
     },
     validate: (p) => {
       if (!pathTextValid(p.path)) return { valid: false, error: "path must be a safe non-empty string without traversal." };
-      if (!p.newName || typeof p.newName !== "string") return { valid: false, error: "newName (string) required." };
+      if (typeof p.newName !== "string" || !isSafeBasename(p.newName)) return { valid: false, error: "newName must be a safe plain name." };
       return { valid: true };
     },
     execute: renameFile,
@@ -205,6 +205,7 @@ const TOOLS: ToolDefinition[] = [
         if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
           return { valid: false, error: "url must be credential-free http(s)." };
         }
+        if (!isPublicHostname(parsed.hostname)) return { valid: false, error: "url hostname must be public." };
       } catch { return { valid: false, error: "url must be valid http(s)." }; }
       return { valid: true };
     },

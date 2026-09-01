@@ -34,6 +34,7 @@ import {
   Keyboard,
   User,
   LogIn,
+  Users,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Memory, MemoryCategory } from "./lib/memoryTypes";
@@ -50,6 +51,7 @@ import { BrainObservability } from "./lib/brainObservability";
 import { CognitiveEvent, CognitiveDecision } from "./lib/cognitiveState";
 import { MemoryRetrieval } from "./lib/memoryRetrieval";
 import { useAuth } from "./contexts/AuthContext";
+import type { ConversationMode, ConversationParticipantState, SpeakerTurn } from "./lib/conversation/types";
 
 export default function App() {
   const { user, getIdToken } = useAuth();
@@ -357,6 +359,9 @@ export default function App() {
   // TranscriptionPanel state
   const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [showTranscriptionPanel, setShowTranscriptionPanel] = useState<boolean>(false);
+  const [conversationMode, setConversationMode] = useState<ConversationMode>("single_user");
+  const [conversationState, setConversationState] = useState<ConversationParticipantState | null>(null);
+  const [lastVoiceMemoryEligible, setLastVoiceMemoryEligible] = useState(true);
 
   // Cognitive Architecture refs
   const cognitiveLoopRef = useRef<CognitiveLoop | null>(null);
@@ -482,13 +487,17 @@ export default function App() {
     };
   }, []);
 
-  const addTranscriptEntry = useCallback((role: "user" | "assistant" | "system", text: string) => {
+  const addTranscriptEntry = useCallback((role: "user" | "assistant" | "system", text: string, turn?: SpeakerTurn) => {
     const entry: TranscriptEntry = {
       id: `te-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       role,
       text,
       timestamp: Date.now(),
       isFinal: true,
+      ...(turn ? {
+        speakerId: turn.speakerId,
+        speakerRole: turn.speakerRole,
+      } : {}),
     };
     setTranscriptEntries(prev => [...prev.slice(-199), entry]);
   }, []);
@@ -667,6 +676,7 @@ export default function App() {
   // Voice Memory Auto-Capture Hook: Listens for triggers like "LOHZ, remember this"
   const { lastCaptured, clearNotification } = useVoiceMemory({
     userCaption,
+    memoryEligible: lastVoiceMemoryEligible,
     onAddMemory: handleAddManualMemory,
     debounceMs: 400
   });
@@ -682,6 +692,7 @@ export default function App() {
           setModelCaption("");
           setActiveEmotion("idle");
           setCharacterState("idle");
+          setLastVoiceMemoryEligible(true);
         } else if (newState === "listening") {
           // Return to receptive resting state
           setActiveEmotion("idle");
@@ -690,14 +701,14 @@ export default function App() {
           setCharacterState("talking");
         }
       },
-      onTranscription: (role, text) => {
+      onTranscription: (role, text, turn) => {
         const mappedRole = role === "model" ? "assistant" : role;
 
         // Add to transcription panel
-        addTranscriptEntry(mappedRole, text);
+        addTranscriptEntry(mappedRole, text, turn);
 
         // Dispatch to cognitive loop
-        if (cognitiveLoopRef.current) {
+        if (cognitiveLoopRef.current && (role !== "user" || !turn || turn.speakerRole === "primary_user")) {
           const event: CognitiveEvent = {
             type: "voice_transcript",
             payload: { text, role: mappedRole },
@@ -707,10 +718,16 @@ export default function App() {
           cognitiveLoopRef.current.dispatch(event);
         }
 
-        if (role === "user") {
+        if (role === "user" && (!turn || turn.speakerRole === "primary_user")) {
+          setLastVoiceMemoryEligible(true);
           setUserCaption(text);
           setModelCaption("");
           setCharacterState("thinking");
+        } else if (role === "user") {
+          // Participant speech is visible session context, never primary-user memory/input state.
+          setLastVoiceMemoryEligible(false);
+          setUserCaption("");
+          setCharacterState("idle");
         } else if (role === "model") {
           setIsTextProcessing(false);
           setModelCaption((prev) => {
@@ -722,6 +739,7 @@ export default function App() {
           setUserCaption("");
         }
       },
+      onConversationState: setConversationState,
       onToolCall: (name, args, callback) => {
         console.log(`[App] Tool call triggered: ${name}`, args);
         
@@ -796,6 +814,7 @@ export default function App() {
   // TextInput: send text message into cognitive architecture
   const handleTextSend = useCallback(async (text: string) => {
     if (!text.trim()) return;
+    setLastVoiceMemoryEligible(true);
     setIsTextProcessing(true);
     addTranscriptEntry("user", text);
     setUserCaption(text);
@@ -1001,6 +1020,39 @@ export default function App() {
                 {dynamicAmbianceEnabled && currentSentiment && currentSentiment.label !== "neutral"
                   ? `AMBIANCE (${currentSentiment.label.toUpperCase()})`
                   : "AMBIANCE"}
+              </span>
+            </button>
+          </Tooltip>
+
+          {/* Voice Modulator Slider Floating Panel Trigger */}
+          <Tooltip
+            content={conversationMode === "multi_person"
+              ? "Group conversation is on. Untagged voice is treated as an unknown participant, not the account owner."
+              : "Switch between one-person and privacy-safe group conversation attribution."}
+            side="bottom"
+          >
+            <button
+              type="button"
+              aria-pressed={conversationMode === "multi_person"}
+              aria-label={conversationMode === "multi_person" ? "Disable group conversation" : "Enable group conversation"}
+              onClick={() => {
+                const next: ConversationMode = conversationMode === "single_user" ? "multi_person" : "single_user";
+                setConversationMode(next);
+                sessionRef.current?.setConversationMode(next);
+              }}
+              className={`flex items-center gap-1.5 transition text-xs font-mono tracking-widest cursor-pointer px-2.5 py-1 rounded-full border ${
+                conversationMode === "multi_person"
+                  ? "bg-cyan-500/20 border-cyan-400/60 text-cyan-100 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+                  : "opacity-40 hover:opacity-100 text-white border-transparent"
+              }`}
+            >
+              <Users size={13} aria-hidden="true" />
+              <span className="hidden sm:inline">
+                {conversationMode === "multi_person"
+                  ? (conversationState && conversationState.participantCount > 1
+                    ? `${conversationState.participantCount} PEOPLE`
+                    : "GROUP")
+                  : "1 PERSON"}
               </span>
             </button>
           </Tooltip>

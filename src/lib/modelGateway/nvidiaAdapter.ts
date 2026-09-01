@@ -21,17 +21,11 @@ export class NvidiaAdapter implements ModelProvider {
   name: ProviderName = "nvidia";
   capabilities: ModelCapability[] = [...SUPPORTED];
 
-  private model = "meta/llama-3.1-8b-instruct";
+  private model = process.env.NVIDIA_MODEL?.trim() || "nvidia/nemotron-3-nano-30b-a3b";
 
   async generate(request: GenerateRequest): Promise<GenerateResult> {
     if (!this.capabilities.includes(request.capability)) {
-      return {
-        text: "",
-        provider: "nvidia",
-        model: this.model,
-        capability: request.capability,
-        latencyMs: 0,
-      };
+      throw new Error(`NVIDIA provider does not support ${request.capability}`);
     }
 
     const apiKey = await credentialStore.getCredential("nvidia");
@@ -64,6 +58,7 @@ export class NvidiaAdapter implements ModelProvider {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
@@ -102,6 +97,7 @@ export class NvidiaAdapter implements ModelProvider {
     try {
       const res = await fetch(`${NVIDIA_BASE}/models`, {
         headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         return { healthy: false, latencyMs: Date.now() - start, error: `HTTP ${res.status}` };

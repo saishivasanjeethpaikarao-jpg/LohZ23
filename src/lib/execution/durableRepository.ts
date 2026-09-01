@@ -5,6 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import type { PlanStore } from "../planner/planPersistence";
 import type { Plan } from "../planner/types";
 import type { ObservationStore } from "../observation/observationStore";
@@ -13,6 +14,7 @@ import { OBSERVATION_LIMITS } from "../observation/types";
 import type { ExecutionStore } from "./persistence";
 import type { ExecutionRecord } from "./types";
 import type { IdempotencyRecord, IdempotencyStore } from "./idempotency";
+import type { ExecutionLease, ExecutionLeaseStore } from "./executionLease";
 
 interface UserExecutionData {
   uid: string;
@@ -33,12 +35,13 @@ function safeUid(uid: string): string {
   return Buffer.from(uid, "utf8").toString("base64url");
 }
 
-export class DurableExecutionRepository implements PlanStore, ExecutionStore, ObservationStore, IdempotencyStore {
+export class DurableExecutionRepository implements PlanStore, ExecutionStore, ObservationStore, IdempotencyStore, ExecutionLeaseStore {
   private readonly root: string;
 
   constructor(root = path.join(process.cwd(), "data", "phase33")) {
     this.root = path.resolve(root);
     fs.mkdirSync(this.root, { recursive: true });
+    fs.mkdirSync(path.join(this.root, "leases"), { recursive: true });
   }
 
   private file(uid: string): string {
@@ -101,7 +104,8 @@ export class DurableExecutionRepository implements PlanStore, ExecutionStore, Ob
     const value = this.load(uid).executions[requestId]; return value ? clone(value) : null;
   }
   async saveExecution(record: ExecutionRecord): Promise<boolean> {
-    const data = this.load(record.uid); data.executions[record.requestId] = clone(record); return this.save(record.uid, data);
+    const data = this.load(record.uid); if (data.executions[record.requestId]) return false;
+    data.executions[record.requestId] = clone(record); return this.save(record.uid, data);
   }
   async updateExecution(record: ExecutionRecord): Promise<boolean> {
     const data = this.load(record.uid); if (!data.executions[record.requestId]) return false;
@@ -138,5 +142,48 @@ export class DurableExecutionRepository implements PlanStore, ExecutionStore, Ob
   }
   async delete(uid: string, key: string): Promise<boolean> {
     const data = this.load(uid); if (!data.idempotency[key]) return false; delete data.idempotency[key]; return this.save(uid, data);
+  }
+
+  private leaseFile(uid: string, planId: string): string {
+    const planKey = createHash("sha256").update(planId).digest("hex");
+    return path.join(this.root, "leases", `${safeUid(uid)}-${planKey}.json`);
+  }
+
+  async acquireExecutionLease(uid: string, planId: string, requestId: string, ttlMs: number): Promise<boolean> {
+    if (!planId || !requestId || !Number.isFinite(ttlMs) || ttlMs < 1_000 || ttlMs > 24 * 60 * 60 * 1_000) return false;
+    const file = this.leaseFile(uid, planId);
+    const now = Date.now();
+    const lease: ExecutionLease = { uid, planId, requestId, acquiredAt: now, expiresAt: now + ttlMs, version: 1 };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        fs.writeFileSync(file, JSON.stringify(lease), { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") return false;
+      }
+      try {
+        const current = JSON.parse(fs.readFileSync(file, "utf8")) as ExecutionLease;
+        if (current.uid !== uid || current.planId !== planId) return false;
+        if (current.requestId === requestId && current.expiresAt > now) return true;
+        if (current.expiresAt > now) return false;
+        const stale = `${file}.${process.pid}.${Date.now()}.stale`;
+        fs.renameSync(file, stale);
+        try { fs.unlinkSync(stale); } catch { /* best effort */ }
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  async releaseExecutionLease(uid: string, planId: string, requestId: string): Promise<boolean> {
+    const file = this.leaseFile(uid, planId);
+    try {
+      if (!fs.existsSync(file)) return true;
+      const current = JSON.parse(fs.readFileSync(file, "utf8")) as ExecutionLease;
+      if (current.uid !== uid || current.planId !== planId || current.requestId !== requestId) return false;
+      fs.unlinkSync(file);
+      return true;
+    } catch { return false; }
   }
 }

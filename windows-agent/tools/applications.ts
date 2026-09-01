@@ -169,6 +169,10 @@ export function knownAppNames(): string[] {
   return APP_PROFILES.map((p) => p.aliases[0]);
 }
 
+export function isKnownAppName(name: string): boolean {
+  return findProfile(name) !== null;
+}
+
 function appNotFound(name: string): Error {
   const e = new Error(
     `Application "${name}" is not in the known-app list. Known apps: ${knownAppNames().join(", ")}.`

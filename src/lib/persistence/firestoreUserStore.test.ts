@@ -155,10 +155,10 @@ describe("FirestoreUserStore (mock backend)", () => {
     expect(await store.ensureProfile("nobody")).not.toBeNull();
   });
 
-  it("rejects unsafe uids before they reach the database", () => {
-    expect(() => store.getProfile("a/b")).rejects.toThrow();
-    expect(() => store.getProfile("../escape")).rejects.toThrow();
-    expect(() => store.getProfile("")).rejects.toThrow();
+  it("rejects unsafe uids before they reach the database", async () => {
+    await expect(store.getProfile("a/b")).rejects.toThrow();
+    await expect(store.getProfile("../escape")).rejects.toThrow();
+    await expect(store.getProfile("")).rejects.toThrow();
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { 
   X, 
   ExternalLink, 
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { validateNavigationMessage } from "../lib/browserSecurity";
+import { useAuth } from "../contexts/AuthContext";
 
 interface LogItem {
   id: string;
@@ -60,6 +61,14 @@ export const BrowserAgent: React.FC<BrowserAgentProps> = ({
   onClose,
   actionTrigger
 }) => {
+  const { getIdToken } = useAuth();
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    try {
+      const token = await getIdToken();
+      if (token) return { Authorization: `Bearer ${token}` };
+    } catch { /* fail closed below */ }
+    return import.meta.env.DEV ? { "X-LOHZ-Dev-Uid": "local-development" } : {};
+  }, [getIdToken]);
   // Tabs management state
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
@@ -195,7 +204,7 @@ export const BrowserAgent: React.FC<BrowserAgentProps> = ({
           const urlObj = new URL(activeTab.url);
           const q = urlObj.searchParams.get("search_query") || "";
           
-          fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`)
+          getAuthHeaders().then((headers) => fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`, { headers }))
             .then(res => {
               if (!res.ok) throw new Error(`HTTP status ${res.status}`);
               return res.json();
@@ -220,14 +229,15 @@ export const BrowserAgent: React.FC<BrowserAgentProps> = ({
         setYtSearchResults([]);
       }
     }
-  }, [activeTabId, activeTab?.url]);
+  }, [activeTabId, activeTab?.url, getAuthHeaders]);
 
   // Read Playwright Local server status on a loop to support the local headed helper if active
   useEffect(() => {
     let isMounted = true;
     const fetchStatus = async () => {
       try {
-        const res = await fetch("http://localhost:3001/api/status", { mode: "cors" });
+        const headers = await getAuthHeaders();
+        const res = await fetch("/api/agent/status", { headers });
         if (res.ok && isMounted) {
           const data = await res.json();
           setIsLocalConnected(true);
@@ -248,7 +258,7 @@ export const BrowserAgent: React.FC<BrowserAgentProps> = ({
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [getAuthHeaders]);
 
   // Set hook error context on iframe document
   useEffect(() => {

@@ -15,6 +15,8 @@ import type {
   RoutingResult,
 } from "./types";
 import { classify } from "./intentRouter";
+import type { SpeakerAuthorization } from "../conversation/types";
+import type { AdaptiveRecommendation } from "../adaptation/types";
 
 export interface ToolExecutionResult {
   ok: boolean;
@@ -47,6 +49,8 @@ export interface RouteOptions {
    *  SituationFrame. When present, Tier 2 reasoning uses it instead of
    *  the raw input; the gateway seam/cost controls are unchanged. */
   situationPrompt?: string;
+  /** Session speaker role. Authentication remains the only authority boundary. */
+  speakerAuthorization?: SpeakerAuthorization;
 }
 
 export interface RouteOutcome extends RoutingResult {
@@ -70,6 +74,12 @@ export const MAX_ROUTE_DEPTH = 3;
 
 export interface CognitiveRouterDeps {
   executeTool: ToolExecutor;
+  capabilityGate?: (
+    userId: string,
+    input: string,
+    intent: string,
+    toolName?: string
+  ) => Promise<{ available: boolean; response?: string; errorKind?: string } | null>;
   providers?: LightContextProviders;
   gateway?: {
     generate: (req: {
@@ -81,6 +91,9 @@ export interface CognitiveRouterDeps {
   };
   temporal?: {
     recordObservation: (userId: string, description: string, importance: number) => Promise<void>;
+  };
+  adaptation?: {
+    recommendForInput: (userId: string, intent: string, input: string) => Promise<AdaptiveRecommendation | null>;
   };
   /** Phase 28 seam - optional; when present, tier3 requests produce a plan. */
   planner?: {
@@ -168,8 +181,41 @@ export class CognitiveRouter {
       }, started);
     }
 
-    const classification = classify(input);
+    let classification = classify(input);
     lifecycle.push("CLASSIFIED");
+
+    if (opts.speakerAuthorization && opts.speakerAuthorization !== "primary_user") {
+      const privileged = classification.tier === "tier0_direct"
+        || classification.tier === "tier3_autonomous"
+        || classification.intent === "memory_query"
+        || classification.intent === "context_query";
+      if (privileged) {
+        lifecycle.push("REJECT", "COMPLETED");
+        return this.finish(requestId, authenticatedUserId, classification, false, lifecycle, {
+          response: "I understood the request, but a participant cannot authorize actions or access the account owner's private context. Please ask the authenticated user to make or confirm the request.",
+          errorKind: "participant_not_authorized",
+          verificationStatus: "NOT_APPLICABLE",
+        }, started);
+      }
+    }
+
+    // Phase 40 — only an explicitly deployed, user-owned adaptation may
+    // influence routing. The transition matrix never adds tool authority,
+    // reduces risk, changes arguments, or bypasses capability/confirmation.
+    if ((!opts.speakerAuthorization || opts.speakerAuthorization === "primary_user") && this.deps.adaptation) {
+      try {
+        const advice = await this.deps.adaptation.recommendForInput(authenticatedUserId, classification.intent, input);
+        if (advice?.approach === "clarification" && !classification.needsClarification) {
+          classification = { ...classification, confidence: Math.min(classification.confidence, 0.7), needsClarification: "Historical verified outcomes suggest I should clarify this request before choosing an approach. What exact result do you want?" };
+        } else if (advice?.approach === "model_reasoning" && classification.tier === "tier1_light" && !classification.requiresTool && !classification.requiresMemory && !classification.requiresContext) {
+          classification = { ...classification, tier: "tier2_reasoning", requiresReasoning: true };
+        }
+        // planner/known_skill/recovery_strategy recommendations remain within
+        // their existing tier-3 execution machinery; selection is never auth.
+      } catch {
+        /* adaptation failure preserves the original deterministic route */
+      }
+    }
 
     if (classification.needsClarification && classification.confidence < 0.75) {
       lifecycle.push("ASK", "COMPLETED");
@@ -179,11 +225,35 @@ export class CognitiveRouter {
     }
     lifecycle.push("ROUTED");
 
+    if (this.deps.capabilityGate) {
+      try {
+        const toolName = classification.tier === "tier0_direct" ? INTENT_TO_TOOL[classification.intent] : undefined;
+        const gate = await this.deps.capabilityGate(authenticatedUserId, input, classification.intent, toolName);
+        if (gate && !gate.available) {
+          lifecycle.push("REJECT", "COMPLETED");
+          return this.finish(requestId, authenticatedUserId, classification, false, lifecycle, {
+            response: gate.response ?? "That capability is currently unavailable. Nothing was executed.",
+            errorKind: gate.errorKind ?? "capability_unavailable",
+            verificationStatus: "NOT_APPLICABLE",
+          }, started);
+        }
+      } catch {
+        if (classification.tier === "tier0_direct") {
+          lifecycle.push("REJECT", "COMPLETED");
+          return this.finish(requestId, authenticatedUserId, classification, false, lifecycle, {
+            response: "I can’t verify my computer-control capability right now, so I did not execute anything.",
+            errorKind: "capability_check_unavailable",
+            verificationStatus: "NOT_APPLICABLE",
+          }, started);
+        }
+      }
+    }
+
     switch (classification.tier) {
       case "tier0_direct":
         return this.runDirect(requestId, authenticatedUserId, classification, lifecycle, started);
       case "tier1_light":
-        return this.runLight(requestId, authenticatedUserId, input, classification, lifecycle, started);
+        return this.runLight(requestId, authenticatedUserId, input, classification, lifecycle, started, opts);
       case "tier2_reasoning":
         return this.runReasoning(requestId, authenticatedUserId, input, classification, lifecycle, started, opts);
       case "tier3_autonomous":
@@ -267,16 +337,18 @@ export class CognitiveRouter {
     input: string,
     c: RoutingResult,
     lifecycle: LifecycleStage[],
-    started: number
+    started: number,
+    opts: RouteOptions = {}
   ): Promise<RouteOutcome> {
     let response: string | null = null;
+    const canReadPrivateContext = (opts.speakerAuthorization ?? "primary_user") === "primary_user";
 
-    if (c.intent === "memory_query" && this.deps.providers?.retrieveMemories) {
+    if (canReadPrivateContext && c.intent === "memory_query" && this.deps.providers?.retrieveMemories) {
       const mems = await this.deps.providers.retrieveMemories(userId, input, 5);
       response = mems.length
         ? `From memory: ${mems.map((m) => m.text).join(" | ")}`
         : "I do not have a relevant memory for that yet.";
-    } else if ((c.intent === "context_query" || c.intent === "chat") && this.deps.providers?.currentContextSnapshot) {
+    } else if (canReadPrivateContext && (c.intent === "context_query" || c.intent === "chat") && this.deps.providers?.currentContextSnapshot) {
       const snap = await this.deps.providers.currentContextSnapshot(userId);
       response = snap
         ? `Current context: ${JSON.stringify(snap).slice(0, 400)}`
@@ -301,7 +373,7 @@ export class CognitiveRouter {
     if (!this.deps.gateway) {
       // Graceful degradation (§22): Tier 1-style acknowledgement.
       lifecycle.push("ASK", "COMPLETED");
-      return this.finish(requestId, userId, c, true, lifecycle, {
+      return this.finish(requestId, userId, c, false, lifecycle, {
         response: "Reasoning model unavailable right now.",
         errorKind: "gateway_unavailable",
       }, started);
@@ -321,7 +393,7 @@ export class CognitiveRouter {
       }, started);
     } catch {
       lifecycle.push("ASK", "COMPLETED");
-      return this.finish(requestId, userId, c, true, lifecycle, {
+      return this.finish(requestId, userId, c, false, lifecycle, {
         response: "Reasoning failed â€” please retry later.",
         errorKind: "model_failed",
       }, started);
@@ -347,16 +419,18 @@ export class CognitiveRouter {
         });
         if (outcome.ok && outcome.plan && outcome.summary) {
           lifecycle.push("PLANNED", "COMPLETED");
-          return this.finish(requestId, userId, c, true, lifecycle, {
+          const completedWithoutFailure = outcome.plan.status !== "failed" && outcome.plan.status !== "cancelled";
+          return this.finish(requestId, userId, c, completedWithoutFailure, lifecycle, {
             response: outcome.summary,
             planId: outcome.plan.id,
             plannerCalled: true,
             modelCalls: outcome.modelCallsUsed,
+            ...(!completedWithoutFailure ? { errorKind: "planned_execution_failed" } : {}),
           }, started);
         }
         if (outcome.needsClarification || outcome.rejected) {
           lifecycle.push("ASK", "COMPLETED");
-          return this.finish(requestId, userId, c, true, lifecycle, {
+          return this.finish(requestId, userId, c, false, lifecycle, {
             response: outcome.reason ?? "Clarification needed before planning.",
             planId: null,
             plannerCalled: true,
@@ -368,7 +442,7 @@ export class CognitiveRouter {
       }
     }
     lifecycle.push("ASK", "COMPLETED");
-    return this.finish(requestId, userId, c, true, lifecycle, {
+    return this.finish(requestId, userId, c, false, lifecycle, {
       response: "AUTONOMOUS_REQUEST acknowledged - no planner configured; nothing was executed.",
       plannerCalled: false,
     }, started);
@@ -389,7 +463,7 @@ export class CognitiveRouter {
       plannerCalled?: boolean;
       planId?: string | null;
       modelCalls?: number;
-      verificationStatus?: "VERIFIED" | "FAILED" | "INCONCLUSIVE" | "UNVERIFIED";
+      verificationStatus?: "VERIFIED" | "FAILED" | "INCONCLUSIVE" | "UNVERIFIED" | "NOT_APPLICABLE";
     },
     started: number
   ): RouteOutcome {

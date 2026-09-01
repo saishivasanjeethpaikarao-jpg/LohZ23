@@ -103,6 +103,31 @@ describe("Phase 33 durable contracts", () => {
     const outcomes = await engine.recoverInterruptedUser("user-a");
     expect(calls).toBe(1); expect(outcomes[0]?.recordStatus).toBe("completed");
   });
+  it("resumes a partially completed plan without replaying its completed step", async () => {
+    const { dir, store } = repo();
+    const p = openPlan("user-a", "restart-partial");
+    p.kind = "sequential";
+    p.steps.push({ id: "s2", index: 1, title: "system info", description: "read system info",
+      intent: "system_info", status: "ready", dependencies: ["s1"], requiredTool: "getSystemInfo",
+      arguments: {}, expectedOutcome: "system info returned", riskLevel: "low", confidence: 1,
+      retryPolicy: { maxRetries: 0 }, timeoutMs: 1000 });
+    await store.savePlan("user-a", p);
+    const record = interrupted(p, "ready");
+    record.requestId = "restart-partial-request";
+    record.steps[0] = { ...record.steps[0], status: "completed", attempts: 1, finishedAt: Date.now(), observedResult: "opened" };
+    record.steps.push({ stepId: "s2", title: "system info", toolName: "getSystemInfo", status: "ready",
+      attempts: 0, startedAt: null, finishedAt: null, durationMs: null, observedResult: null, failure: null });
+    await store.saveExecution(record);
+
+    const calls: string[] = [];
+    const restarted = new DurableExecutionRepository(dir);
+    const engine = new PlanExecutionEngine({ store: restarted, planStore: restarted,
+      toolCatalog: () => ["openApp", "getSystemInfo"],
+      runner: async (_uid, tool) => { calls.push(tool); return { ok: true, result: {} }; } });
+    const outcomes = await engine.recoverInterruptedUser("user-a");
+    expect(outcomes[0]?.recordStatus).toBe("completed");
+    expect(calls).toEqual(["getSystemInfo"]);
+  });
   it("stops ambiguous in-flight side effects after restart", async () => {
     const { dir, store } = repo(); const p = openPlan("user-a", "restart-ambiguous");
     await store.savePlan("user-a", p); await store.saveExecution(interrupted(p, "running"));

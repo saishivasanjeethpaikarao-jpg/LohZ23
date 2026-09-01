@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { authMiddleware, createVerifiedAuthMiddleware, resetAuthStateForTests } from "../../server/authMiddleware";
+import { authMiddleware, createVerifiedAuthMiddleware, resetAuthStateForTests, verifyToken } from "../../server/authMiddleware";
 
 function invoke(middleware: any, input: { authorization?: string; devUid?: string; body?: unknown } = {}) {
   const req: any = {
@@ -40,6 +40,29 @@ describe("Phase 33 authentication", () => {
     const { req, result } = await invoke(authMiddleware, { devUid: "developer-a" });
     expect(result.next).toBe(true);
     expect(req.userId).toBe("developer-a");
+  });
+  it("requires an explicit valid identity even when the development bypass is enabled", async () => {
+    process.env.NODE_ENV = "development";
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH = "./definitely-missing-service-account.json";
+    process.env.LOHZ_ALLOW_INSECURE_DEV_AUTH = "1";
+
+    const missing = await invoke(authMiddleware);
+    const malformed = await invoke(authMiddleware, { devUid: "../forged" });
+
+    expect(missing.result.next).toBe(false);
+    expect(missing.result.statusCode).toBe(401);
+    expect(malformed.result.next).toBe(false);
+    expect(malformed.result.statusCode).toBe(401);
+  });
+  it("requires the explicit dev token format for WebSocket authentication", async () => {
+    process.env.NODE_ENV = "development";
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH = "./definitely-missing-service-account.json";
+    process.env.LOHZ_ALLOW_INSECURE_DEV_AUTH = "1";
+
+    expect(await verifyToken("")).toBeNull();
+    expect(await verifyToken("developer-a")).toBeNull();
+    expect(await verifyToken("dev:../forged")).toBeNull();
+    expect(await verifyToken("dev:developer-a")).toBe("developer-a");
   });
   it("uses the verified UID and ignores a forged body UID", async () => {
     const middleware = createVerifiedAuthMiddleware(async (token) => token === "token-a" ? "user-a" : Promise.reject(new Error("bad")));

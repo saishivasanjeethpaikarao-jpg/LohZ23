@@ -81,6 +81,8 @@ export interface GatewayConfig {
   enforceCostLimit?: boolean;
   /** Max retained cost-log entries (oldest evicted). Default 1000. */
   maxCostLogEntries: number;
+  /** Hard response deadline for one provider attempt. */
+  requestTimeoutMs: number;
 }
 
 export class CostLimitExceededError extends Error {
@@ -102,4 +104,5 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   maxRetries: 1,
   enforceCostLimit: false,
   maxCostLogEntries: 1000,
+  requestTimeoutMs: 30_000,
 };

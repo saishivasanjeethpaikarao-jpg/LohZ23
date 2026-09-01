@@ -87,7 +87,11 @@ export class PlanExecutionEngine {
         await this.deps.store.updateExecution(record);
         continue;
       }
-      recovered.push(await this.runPlan(plan, { userId, requestId: record.requestId }, record));
+      recovered.push(await this.withExecutionLease(
+        plan,
+        { userId, requestId: record.requestId },
+        () => this.runPlan(plan, { userId, requestId: record.requestId }, record),
+      ));
     }
     return recovered;
   }
@@ -113,7 +117,9 @@ export class PlanExecutionEngine {
         }
         // No step can execute before this state, so replacing the checkpoint is
         // safe. The normal path below revalidates every argument and policy.
-        await this.deps.store.deleteExecution(ctx.userId, ctx.requestId);
+        if (!(await this.deps.store.deleteExecution(ctx.userId, ctx.requestId))) {
+          return this.reject(planInput, ctx, "could not advance the durable confirmation checkpoint");
+        }
       } else {
       return {
         authorization: existing.authorization,
@@ -156,7 +162,9 @@ export class PlanExecutionEngine {
     };
 
     if (policy.decision !== "AUTHORIZED") {
-      await this.deps.store.saveExecution(baseRecord);
+      if (!(await this.deps.store.saveExecution(baseRecord))) {
+        return this.reject(planInput, ctx, "authorization checkpoint persistence unavailable - failing closed");
+      }
       return {
         authorization: policy.decision,
         planStatus: planInput.status,
@@ -170,31 +178,24 @@ export class PlanExecutionEngine {
     }
 
     // ── Per-plan lock: two workers never run the same plan ──
-    // Persist the record FIRST so idempotent replays and concurrent
-    // duplicates observe it even while execution is in flight.
-    const preSaved = await this.deps.store.saveExecution(baseRecord);
-    if (!preSaved) {
-      return this.reject(planInput, ctx, "execution persistence unavailable - failing closed");
-    }
     const lockKey = `${ctx.userId}:${planInput.id}`;
     const inflight = this.locks.get(lockKey);
     if (inflight) {
       await inflight.catch(() => undefined);
-      const replay = await this.deps.store.getExecution(ctx.userId, ctx.requestId);
-      if (replay) {
-        return {
-          authorization: replay.authorization,
-          planStatus: replay.planStatusAfter,
-          recordStatus: replay.status,
-          summary: "Concurrent duplicate suppressed; existing result returned.",
-          steps: replay.steps,
-          idempotent: true,
-        };
-      }
       return this.reject(planInput, ctx, "another worker is executing this plan");
     }
 
-    const work = this.runPlan(planInput, ctx, baseRecord);
+    // Reserve the plan lock before the first persistence await. This closes the
+    // race where a second request could save an orphaned `running` record while
+    // the first request owned the actual worker.
+    const work = (async () => {
+      return this.withExecutionLease(planInput, ctx, async () => {
+        if (!(await this.deps.store.saveExecution(baseRecord))) {
+          return this.reject(planInput, ctx, "execution persistence unavailable - failing closed");
+        }
+        return this.runPlan(planInput, ctx, baseRecord);
+      });
+    })();
     this.locks.set(lockKey, work);
     try {
       return await work;
@@ -226,7 +227,9 @@ export class PlanExecutionEngine {
     }
 
     record.status = "running";
-    await this.deps.store.updateExecution(record);
+    if (!(await this.deps.store.updateExecution(record))) {
+      return this.persistenceFailure(plan, record, "initial_checkpoint");
+    }
     await this.emit({ userId: ctx.userId, type: "plan_started", description: plan.title, importance: 0.6 });
 
     let haltedReason: string | null = null;
@@ -299,11 +302,23 @@ export class PlanExecutionEngine {
         statuses.set(ps.id, next);
 
         if (next === "completed" && rec.toolName) {
-          await this.deps.idempotency?.put({
-            uid: ctx.userId, key: idempotencyKey, requestId: ctx.requestId,
-            planId: plan.id, stepId: ps.id, status: "completed",
-            createdAt: rec.startedAt ?? this.now(), updatedAt: rec.finishedAt ?? this.now(),
-          });
+          if (this.deps.idempotency) {
+            const saved = await this.deps.idempotency.put({
+              uid: ctx.userId, key: idempotencyKey, requestId: ctx.requestId,
+              planId: plan.id, stepId: ps.id, status: "completed",
+              createdAt: rec.startedAt ?? this.now(), updatedAt: rec.finishedAt ?? this.now(),
+            });
+            if (!saved) {
+              rec.status = "failed";
+              rec.failure = {
+                code: "idempotency_checkpoint_failed",
+                message: "action completed but its replay checkpoint could not be persisted",
+                retryable: false,
+              };
+              statuses.set(ps.id, "failed");
+              return;
+            }
+          }
           await this.emit({
             userId: ctx.userId, type: "step_completed",
             description: `${rec.title} via ${rec.toolName}`, importance: 0.4,
@@ -318,7 +333,9 @@ export class PlanExecutionEngine {
       await Promise.all(promises);
 
       // Persist after each wave.
-      await this.deps.store.updateExecution(record);
+      if (!(await this.deps.store.updateExecution(record))) {
+        return this.persistenceFailure(plan, record, "wave_checkpoint");
+      }
 
       // Failure policy gate: halt-family policies stop scheduling;
       // continue-family policies keep independent branches running.
@@ -379,7 +396,9 @@ export class PlanExecutionEngine {
     record.finishedAt = this.now();
     record.planStatusAfter = planStatusAfter;
     record.version += 1;
-    await this.deps.store.updateExecution(record);
+    if (!(await this.deps.store.updateExecution(record))) {
+      return this.persistenceFailure(plan, record, "final_checkpoint");
+    }
 
     // Persist plan state transition via the SAME PlanStore the planner uses.
     const persisted = await this.deps.planStore.getPlan(ctx.userId, plan.id);
@@ -387,7 +406,18 @@ export class PlanExecutionEngine {
       persisted.status = planStatusAfter;
       persisted.updatedAt = this.now();
       persisted.version += 1;
-      await this.deps.planStore.savePlan(ctx.userId, persisted);
+      if (!(await this.deps.planStore.savePlan(ctx.userId, persisted))) {
+        record.status = "failed";
+        record.planStatusAfter = "failed";
+        record.failure = {
+          code: "plan_state_persistence_failed",
+          message: "execution finished but the plan state transition was not durable",
+          retryable: false,
+        };
+        record.version += 1;
+        await this.deps.store.updateExecution(record);
+        return this.persistenceFailure(plan, record, "plan_transition");
+      }
     }
 
     // Goal evidence ONLY on genuine full completion (Section 15).
@@ -413,6 +443,53 @@ export class PlanExecutionEngine {
   private hasRunning(statuses: Map<string, StepExecStatus>): boolean {
     for (const v of statuses.values()) if (v === "running") return true;
     return false;
+  }
+
+  private executionLeaseTtl(plan: Plan): number {
+    const executionBudget = plan.steps.reduce((total, step) => {
+      const timeout = Math.min(Math.max(step.timeoutMs || 30_000, 1_000), EXECUTION_LIMITS.maxTimeoutMs);
+      const retries = Math.min(Math.max(step.retryPolicy?.maxRetries ?? 0, 0), EXECUTION_LIMITS.maxRetries);
+      return total + timeout * (retries + 1);
+    }, 60_000);
+    return Math.min(Math.max(executionBudget, 60_000), 24 * 60 * 60 * 1_000);
+  }
+
+  private async withExecutionLease(
+    plan: Plan,
+    ctx: { userId: string; requestId: string },
+    work: () => Promise<ExecutionOutcome>,
+  ): Promise<ExecutionOutcome> {
+    if (!this.deps.lease) return work();
+    const acquired = await this.deps.lease.acquireExecutionLease(
+      ctx.userId,
+      plan.id,
+      ctx.requestId,
+      this.executionLeaseTtl(plan),
+    );
+    if (!acquired) return this.reject(plan, ctx, "another distributed worker holds the plan lease");
+    try {
+      return await work();
+    } finally {
+      await this.deps.lease.releaseExecutionLease(ctx.userId, plan.id, ctx.requestId);
+    }
+  }
+
+  private persistenceFailure(plan: Plan, record: ExecutionRecord, stage: string): ExecutionOutcome {
+    record.status = "failed";
+    record.planStatusAfter = "failed";
+    record.finishedAt = this.now();
+    record.failure = {
+      code: "execution_persistence_failed",
+      message: `durable execution state unavailable at ${stage}`,
+      retryable: false,
+    };
+    return {
+      authorization: "AUTHORIZED",
+      planStatus: "failed",
+      recordStatus: "failed",
+      summary: `Execution is inconclusive: durable state failed at ${stage}; completion is not claimed for ${plan.id}.`,
+      steps: record.steps,
+    };
   }
 
   /**

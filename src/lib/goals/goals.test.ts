@@ -132,6 +132,18 @@ describe("priority + progress + blockers", () => {
     expect(okSmall.goal!.status).toBe("progressing");
   });
 
+  it("retains verified world evidence without expanding goal authority", async () => {
+    const { manager } = makeManager();
+    const goal = (await manager.createGoal("u1", { title: "finish phase 35", source: "user" })).goal!;
+    const updated = await manager.updateProgress("u1", goal.id, 0.5, {
+      source: "verified_action", worldAssertionId: "world-verified-1",
+    });
+    expect(updated.ok).toBe(true);
+    expect(updated.goal!.relatedWorldAssertionIds).toEqual(["world-verified-1"]);
+    expect(updated.goal!.source).toBe("user");
+    expect(updated.goal!.autonomyLevel).toBe(0);
+  });
+
   it("blockers recorded and cleared on unblock path", async () => {
     const { manager } = makeManager();
     const g = (await manager.createGoal("u1", { title: "deploy lohz", source: "user" })).goal!;

@@ -34,10 +34,17 @@ import {
   checkVerificationClaims,
   sanitizeDiagnostic,
 } from "./cognitiveGuards";
+import type { ConversationParticipantState, SpeakerAuthorization } from "../conversation/types";
 
 export interface CoreRouteOptions {
   /** Pre-rendered structured Tier-2 prompt built from the SituationFrame. */
   situationPrompt?: string;
+}
+
+export interface CognitiveRequestOptions {
+  requestId?: string;
+  speakerAuthorization?: SpeakerAuthorization;
+  conversation?: ConversationParticipantState;
 }
 
 /** Minimal structural contract of the router outcome we consume. */
@@ -59,7 +66,7 @@ export interface CognitiveCoreDeps {
   router: CognitiveRouter;
   assembler?: ContextAssembler;
   toolCatalog: () => string[];
-  capabilities: Omit<LohzCapabilitySnapshot, "availableTools" | "supportedIntents"> & {
+  capabilities?: Omit<LohzCapabilitySnapshot, "availableTools" | "supportedIntents"> & {
     supportedIntents: string[];
   };
 }
@@ -146,14 +153,29 @@ export class CognitiveCore {
   async process(
     userId: string,
     text: string,
-    opts: { requestId?: string } = {}
+    opts: CognitiveRequestOptions = {}
   ): Promise<CognitiveResult> {
     const started = Date.now();
     if (!userId) throw new Error("CognitiveCore: authenticated uid is required");
 
     // ── Authoritative classification (no re-classification later) ──
     const classification = classify(text);
-    const decision = deriveDecision(classification);
+    const participantPrivilegedRequest = (opts.speakerAuthorization ?? "primary_user") !== "primary_user"
+      && (classification.tier === "tier0_direct"
+        || classification.tier === "tier3_autonomous"
+        || classification.intent === "memory_query"
+        || classification.intent === "context_query");
+    const decision: CognitiveDecision = participantPrivilegedRequest
+      ? {
+          action: "reject",
+          confidence: classification.confidence,
+          riskLevel: classification.riskLevel,
+          requiresPlanning: false,
+          requiresModel: false,
+          requiresConfirmation: false,
+          rationaleMetadata: { reasonCode: "policy_rejection", evidence: ["participant_not_authorized"] },
+        }
+      : deriveDecision(classification);
 
     const requestId = opts.requestId ?? `core-${started}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -166,7 +188,10 @@ export class CognitiveCore {
         classification.tier === "tier3_autonomous")
     ) {
       try {
-        const assembled = await this.deps.assembler.assemble(userId, requestId, classification, text);
+        const assembled = await this.deps.assembler.assemble(userId, requestId, classification, text, {
+          speakerAuthorization: opts.speakerAuthorization ?? "primary_user",
+          conversation: opts.conversation,
+        });
         frame = assembled.frame;
       } catch {
         frame = null; // degrade honestly; providers already record missing lists
@@ -180,7 +205,11 @@ export class CognitiveCore {
       routeOpts.situationPrompt = renderReasoningPrompt(frame, text);
     }
 
-    const outcome = (await this.deps.router.route(userId, text, { ...routeOpts, requestId })) as RouterOutcomeLike;
+    const outcome = (await this.deps.router.route(userId, text, {
+      ...routeOpts,
+      requestId,
+      speakerAuthorization: opts.speakerAuthorization ?? "primary_user",
+    })) as RouterOutcomeLike;
 
     // ── Deterministic consistency checks ──
     const checks = [

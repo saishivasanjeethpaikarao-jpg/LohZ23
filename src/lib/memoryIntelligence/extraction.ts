@@ -38,17 +38,17 @@ interface Rule {
 const RULES: Rule[] = [
   // identity facts
   {
-    kind: "fact", category: "identity", layer: "user_model",
+    kind: "fact", category: "identity", layer: "semantic",
     pattern: /\bmy name is\s+([a-z][a-z\s-]{1,40})/i,
     baseImportance: 0.9, baseConfidence: 0.95, explicitness: 1.0, stability: 1.0,
   },
   {
-    kind: "fact", category: "identity", layer: "user_model",
+    kind: "fact", category: "identity", layer: "semantic",
     pattern: /\bi(?:'m| am)\s+(?:a|an)?\s*([a-z][a-z\s-]{2,40})(?:\.|,|\band\b|$)/i,
     baseImportance: 0.75, baseConfidence: 0.8, explicitness: 0.9, stability: 0.95,
   },
   {
-    kind: "fact", category: "identity", layer: "user_model",
+    kind: "fact", category: "identity", layer: "semantic",
     pattern: /\bi work (?:as|at|for)\s+([a-z][a-z\s-]{2,50})/i,
     baseImportance: 0.85, baseConfidence: 0.9, explicitness: 1.0, stability: 0.9,
   },
@@ -111,7 +111,7 @@ const RULES: Rule[] = [
   },
   // preferences for assistant behavior
   {
-    kind: "preference", category: "preference", layer: "user_model",
+    kind: "preference", category: "preference", layer: "semantic",
     pattern: /\bi want (?:you|lohz) to\s+(.{2,120})/i,
     baseImportance: 0.8, baseConfidence: 0.85, explicitness: 1.0, stability: 0.9,
   },

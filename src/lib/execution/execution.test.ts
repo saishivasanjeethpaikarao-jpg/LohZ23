@@ -6,6 +6,7 @@ import { evaluateExecutionPolicy } from "./policy";
 import { validateToolArgs, toolRisk, isDestructive } from "./guards";
 import type { Plan, PlanStep } from "../planner/types";
 import type { ToolRunner } from "./types";
+import { InMemoryExecutionLeaseStore } from "./executionLease";
 
 const CATALOG = [
   "openApp", "closeApp", "openUrl", "takeScreenshot", "setVolume",
@@ -198,7 +199,7 @@ describe("execution flow", () => {
     const plan = mkPlan({
       failurePolicy: "stop",
       steps: [
-        mkStep({ id: "s1", index: 0, requiredTool: "openApp", arguments: { name: "x" } }),
+        mkStep({ id: "s1", index: 0, requiredTool: "openApp", arguments: { name: "chrome" } }),
         mkStep({ id: "s2", index: 1, requiredTool: "getVolume", dependencies: ["s1"] }),
       ],
     });
@@ -218,7 +219,7 @@ describe("execution flow", () => {
       },
     });
     const plan = mkPlan({
-      steps: [mkStep({ requiredTool: "openApp", arguments: { name: "x" }, retryPolicy: { maxRetries: 2 } })],
+      steps: [mkStep({ requiredTool: "openApp", arguments: { name: "chrome" }, retryPolicy: { maxRetries: 2 } })],
     });
     const out = await engine.executePlan(plan, ctx());
     expect(attempts).toBe(3);
@@ -232,10 +233,10 @@ describe("execution flow", () => {
       runner: async () => { attempts += 1; return { ok: false, errorKind: "timeout" }; },
     });
     const plan = mkPlan({
-      steps: [mkStep({ requiredTool: "openApp", arguments: { name: "x" }, retryPolicy: { maxRetries: 99 } })],
+      steps: [mkStep({ requiredTool: "openApp", arguments: { name: "chrome" }, retryPolicy: { maxRetries: 99 } })],
     });
     const out = await engine.executePlan(plan, ctx());
-    expect(attempts).toBeLessThanOrEqual(3); // 1 + maxRetries cap
+    expect(attempts).toBe(1); // timeout is ambiguous for side effects; never duplicate it
     expect(out.planStatus).toBe("failed");
   });
 
@@ -244,7 +245,7 @@ describe("execution flow", () => {
       runner: () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 500)),
     });
     const plan = mkPlan({
-      steps: [mkStep({ requiredTool: "openApp", arguments: { name: "x" }, timeoutMs: 50 })],
+      steps: [mkStep({ requiredTool: "openApp", arguments: { name: "chrome" }, timeoutMs: 50 })],
     });
     const out = await engine.executePlan(plan, ctx());
     expect(out.steps[0].failure!.code).toBe("timeout");
@@ -279,25 +280,73 @@ describe("idempotency + concurrency", () => {
   });
 
   it("concurrent duplicate plan executions are suppressed by lock", async () => {
-    const { engine, calls } = makeEngine({
+    let executions = 0;
+    const { engine, store } = makeEngine({
       runner: async () => {
+        executions += 1;
         await new Promise((r) => setTimeout(r, 30));
         return { ok: true };
       },
     });
     const plan = mkPlan();
     const c1 = ctx();
+    const otherRequestId = `rq-other-${Math.random()}`;
     const [a, b] = await Promise.all([
       engine.executePlan(plan, c1),
-      engine.executePlan(plan, { ...c1, requestId: `rq-other-${Math.random()}` }),
+      engine.executePlan(plan, { ...c1, requestId: otherRequestId }),
     ]);
     // Second concurrent worker must not double-run tools: it either
     // replays idempotently (same requestId) or is deterministically refused.
-    expect(calls.length).toBeLessThanOrEqual(1);
+    expect(executions).toBe(1);
     expect(
       b.idempotent === true || b.recordStatus === "rejected" || b.summary.includes("duplicate")
     ).toBe(true);
     expect(a.authorization).toBe("AUTHORIZED");
+    const persisted = await store.listExecutions(c1.userId);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].status).not.toBe("running");
+  });
+
+  it("suppresses the same plan across independent engine instances with a shared durable lease", async () => {
+    const lease = new InMemoryExecutionLeaseStore();
+    const planStore = new InMemoryPlanStore();
+    const plan = mkPlan();
+    await planStore.savePlan(plan.userId, plan);
+    let executions = 0;
+    const runner: ToolRunner = async () => {
+      executions += 1;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return { ok: true, result: "done" };
+    };
+    const build = () => new PlanExecutionEngine({
+      store: new InMemoryExecutionStore(), planStore, lease,
+      toolCatalog: () => CATALOG, runner,
+    });
+
+    const [first, second] = await Promise.all([
+      build().executePlan(plan, { userId: "u1", requestId: "distributed-a" }),
+      build().executePlan(plan, { userId: "u1", requestId: "distributed-b" }),
+    ]);
+
+    expect(executions).toBe(1);
+    expect([first.recordStatus, second.recordStatus]).toContain("completed");
+    expect([first.recordStatus, second.recordStatus]).toContain("rejected");
+  });
+
+  it("fails closed before tools run when the initial durable checkpoint cannot update", async () => {
+    const store = new InMemoryExecutionStore();
+    vi.spyOn(store, "updateExecution").mockResolvedValue(false);
+    let calls = 0;
+    const engine = new PlanExecutionEngine({
+      store,
+      planStore: new InMemoryPlanStore(),
+      toolCatalog: () => CATALOG,
+      runner: async () => { calls++; return { ok: true }; },
+    });
+    const out = await engine.executePlan(mkPlan(), ctx());
+    expect(out.recordStatus).toBe("failed");
+    expect(out.summary).toContain("initial_checkpoint");
+    expect(calls).toBe(0);
   });
 
   it("cancellation stops scheduling further steps", async () => {

@@ -20,6 +20,7 @@ import { outcomesFromProcessResultLite } from "./memoryBridge";
 import type { Memory } from "../memoryTypes";
 import { recordLesson } from "../memoryIntelligence/learningSeam";
 import type { CognitiveCore } from "../cognitive/cognitiveCore";
+import type { ConversationParticipantState, SpeakerAuthorization } from "../conversation/types";
 
 export interface IntegrationPipelineDeps {
   router: CognitiveRouter;
@@ -33,6 +34,8 @@ export interface IntegrationPipelineDeps {
   proposeGoalsFromEvidence?: (userId: string, texts: string[], memoryIds: string[]) => Promise<number>;
   /** Bounded lesson candidate on meaningful completed/recovered work. */
   recordLessonCandidate?: (userId: string, text: string) => Promise<void>;
+  /** Passive Phase 37 observation. It cannot alter the cognitive outcome. */
+  onCognitiveOutcome?: (userId: string, outcome: { success: boolean; tier?: string; errorKind?: string }) => Promise<void>;
 }
 
 export interface PipelineHandleResult extends RouteOutcome {
@@ -57,22 +60,38 @@ export class IntegrationPipeline {
    * Single authoritative text entry. Voice transcripts and typed input
    * share this path verbatim (normalization lives in the router).
    */
-  async handleAuthenticatedText(userId: string, text: string, opts: { requestId?: string } = {}): Promise<PipelineHandleResult> {
+  async handleAuthenticatedText(userId: string, text: string, opts: {
+    requestId?: string;
+    speakerAuthorization?: SpeakerAuthorization;
+    conversation?: ConversationParticipantState;
+  } = {}): Promise<PipelineHandleResult> {
     if (!userId) throw new Error("IntegrationPipeline: authenticated uid required");
-    if (this.deps.core) {
-      // Single substrate: core decides + frames, router still executes.
-      const result = await this.deps.core.process(userId, text, opts);
-      const raw = result.raw as RouteOutcome | undefined;
-      if (!raw) throw new Error("IntegrationPipeline: core returned no raw outcome");
-      return {
-        ...raw,
-        decision: result.decision,
-        verificationStatus: result.verificationStatus,
-        consistency: result.consistency,
-      } as PipelineHandleResult;
+    try {
+      if (this.deps.core) {
+        // Single substrate: core decides + frames, router still executes.
+        const result = await this.deps.core.process(userId, text, opts);
+        const raw = result.raw as RouteOutcome | undefined;
+        if (!raw) throw new Error("IntegrationPipeline: core returned no raw outcome");
+        await this.observeCognitive(userId, { success: raw.success, tier: raw.tier, errorKind: raw.diagnostic?.errorKind });
+        return {
+          ...raw,
+          decision: result.decision,
+          verificationStatus: result.verificationStatus,
+          consistency: result.consistency,
+        } as PipelineHandleResult;
+      }
+      const outcome = await this.deps.router.route(userId, text, opts);
+      await this.observeCognitive(userId, { success: outcome.success, tier: outcome.tier, errorKind: outcome.diagnostic?.errorKind });
+      return outcome as PipelineHandleResult;
+    } catch (error) {
+      await this.observeCognitive(userId, { success: false, errorKind: "pipeline_exception" });
+      throw error;
     }
-    const outcome = await this.deps.router.route(userId, text, opts);
-    return outcome as PipelineHandleResult;
+  }
+
+  private async observeCognitive(userId: string, outcome: { success: boolean; tier?: string; errorKind?: string }): Promise<void> {
+    if (!this.deps.onCognitiveOutcome) return;
+    try { await this.deps.onCognitiveOutcome(userId, outcome); } catch { /* diagnostics never alter response truth */ }
   }
 
   /**

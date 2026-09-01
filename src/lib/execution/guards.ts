@@ -6,8 +6,17 @@
 import { getRisk, getTool } from "../../../windows-agent/toolRegistry";
 import { DESTRUCTIVE_TOOLS } from "./types";
 
+const SIDE_EFFECTING_TOOLS = new Set([
+  "openApp", "closeApp", "setVolume", "clipboardWrite", "createFile",
+  "writeFile", "createFolder", "renameFile", "openUrl",
+]);
+
 export function isDestructive(toolName: string): boolean {
   return DESTRUCTIVE_TOOLS.has(toolName);
+}
+
+export function isSideEffecting(toolName: string): boolean {
+  return SIDE_EFFECTING_TOOLS.has(toolName);
 }
 
 export interface ArgCheck {

@@ -68,7 +68,7 @@ describe("MemoryConsolidation", () => {
 
   it("should detect duplicates and produce UPDATE", async () => {
     const existing = mem({
-      id: "existing1", text: "Alice", category: "identity", layer: "user_model",
+      id: "existing1", text: "Alice", category: "identity", layer: "semantic",
       metadata: {
         importance: 0.9, confidence: 0.9, source: "conversation",
         timestamp: Date.now(), lastAccessed: Date.now(), lastReinforced: Date.now(),
