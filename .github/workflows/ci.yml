@@ -118,4 +118,4 @@ jobs:
             echo "No release artifacts were downloaded" >&2
             exit 1
           fi
-          gh release create "$ref_name" "${files[@]}" --title "LOHZ $ref_name" --generate-notes --prerelease
+          gh release create "$ref_name" --repo saishivasanjeethpaikarao-jpg/LohZ23 "${files[@]}" --title "LOHZ $ref_name" --generate-notes --prerelease
