@@ -108,7 +108,7 @@ Run `npm run agent` on Windows. The agent listens on loopback, authenticates wit
 
 ## Testing
 
-Latest validated result: **85 test files / 1,061 tests passed**. Firestore emulator validation: **13/13 tests passed**.
+The historical baseline records **85 test files / 1,061 tests**, but the current full `npm test` run did not complete and is not claimed as passing. Current release gates include `npm run lint`, `npm run build`, Firestore emulator validation (**13/13**), and focused release/security tests (**17/17**).
 
 ```bash
 npm test -- --pool=forks --maxWorkers=1
@@ -119,7 +119,7 @@ npm run test:firestore
 
 ## Desktop status
 
-The Electron shell and packaging configuration exist, but desktop packaging is under development. A signed Windows installer and native Linux/macOS install, upgrade, permission, signing, and notarization tests are not yet evidenced.
+Native Windows, Ubuntu, and macOS runner builds produce release-candidate artifacts. Signed distribution and interactive install, upgrade, permission, audio, authentication, and notarization tests are not yet evidenced.
 
 ## Roadmap and architecture status
 
