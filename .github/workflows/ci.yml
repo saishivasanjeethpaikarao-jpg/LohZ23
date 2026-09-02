@@ -82,10 +82,11 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          test -d release/mac/LOHZ.app
-          ditto -c -k --keepParent release/mac/LOHZ.app release/LOHZ-${{ github.sha }}-macos.zip
+          app_path=$(find release -maxdepth 2 -type d -name 'LOHZ.app' -print -quit)
+          test -n "$app_path"
+          ditto -c -k --keepParent "$app_path" release/LOHZ-${{ github.sha }}-macos.zip
           version=$(node -p "require('./package.json').version")
-          hdiutil create -volname LOHZ -srcfolder release/mac/LOHZ.app -ov -format UDZO "release/LOHZ-${version}-macos.dmg"
+          hdiutil create -volname LOHZ -srcfolder "$app_path" -ov -format UDZO "release/LOHZ-${version}-macos.dmg"
       - run: npm run release:verify
       - run: node scripts/verify-artifact.mjs release
       - run: node scripts/release-manifest.mjs release
