@@ -29,10 +29,12 @@ const env = {
   CI: "1",
   // Native Windows JDKs can receive an MSIX-injected temp path that breaks
   // AF_UNIX selector pipes. Empty values make the JDK choose its safe default.
-  TEMP: "",
-  TMP: "",
-  TMPDIR: "",
-  JAVA_TOOL_OPTIONS: `${process.env.JAVA_TOOL_OPTIONS ?? ""} -Djava.net.preferIPv4Stack=true -Djava.nio.channels.spi.SelectorProvider=sun.nio.ch.WindowsSelectorProvider`.trim(),
+  ...(process.platform === "win32" ? {
+    TEMP: "",
+    TMP: "",
+    TMPDIR: "",
+    JAVA_TOOL_OPTIONS: `${process.env.JAVA_TOOL_OPTIONS ?? ""} -Djava.net.preferIPv4Stack=true -Djava.nio.channels.spi.SelectorProvider=sun.nio.ch.WindowsSelectorProvider`.trim(),
+  } : {}),
 };
 const result = spawnSync(process.execPath, [
   firebaseCli,
