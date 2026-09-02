@@ -38,7 +38,6 @@ linux:
 mac:
   target:
     - dir
-    - dmg
   # macOS requires an ICNS-compatible source. Keep the build portable on
   # unsigned CI runners; supply an approved .icns via mac.icon when available.
   category: public.app-category.productivity

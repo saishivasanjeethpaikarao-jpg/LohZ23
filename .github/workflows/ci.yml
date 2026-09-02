@@ -75,9 +75,10 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          if [ -d release/mac/LOHZ.app ]; then
-            ditto -c -k --keepParent release/mac/LOHZ.app release/LOHZ-${{ github.sha }}-macos-x64.zip
-          fi
+          test -d release/mac/LOHZ.app
+          ditto -c -k --keepParent release/mac/LOHZ.app release/LOHZ-${{ github.sha }}-macos.zip
+          version=$(node -p "require('./package.json').version")
+          hdiutil create -volname LOHZ -srcfolder release/mac/LOHZ.app -ov -format UDZO "release/LOHZ-${version}-macos.dmg"
       - run: npm run release:verify
       - run: node scripts/verify-artifact.mjs release
       - run: node scripts/release-manifest.mjs release
