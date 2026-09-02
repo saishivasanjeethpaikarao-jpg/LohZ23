@@ -39,7 +39,8 @@ mac:
   target:
     - dir
     - dmg
-  icon: assets/branding/icon.svg
+  # macOS requires an ICNS-compatible source. Keep the build portable on
+  # unsigned CI runners; supply an approved .icns via mac.icon when available.
   category: public.app-category.productivity
   hardenedRuntime: true
 dmg:
