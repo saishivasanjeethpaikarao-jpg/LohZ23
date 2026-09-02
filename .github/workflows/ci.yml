@@ -56,6 +56,8 @@ jobs:
             package_script: package:mac
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      LOHZ_SIGNING_CONFIGURED: ${{ secrets.CSC_LINK != '' || secrets.WIN_CSC_LINK != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,7 +65,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run ${{ matrix.package_script }}
+      - name: Package with configured signing credentials
+        if: env.LOHZ_SIGNING_CONFIGURED == 'true'
+        run: npm run ${{ matrix.package_script }}
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
@@ -71,6 +75,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Package unsigned (no signing secrets configured)
+        if: env.LOHZ_SIGNING_CONFIGURED != 'true'
+        run: npm run ${{ matrix.package_script }}
       - name: Archive macOS app bundle
         if: runner.os == 'macOS'
         shell: bash
