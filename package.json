@@ -15,7 +15,7 @@
     "desktop:dev": "npm run build:desktop && electron .",
     "package:win": "npm run build:desktop && electron-builder --win nsis --x64 --publish never",
     "package:linux": "npm run build:desktop && electron-builder --linux --x64 --publish never",
-    "package:mac": "npm run build:desktop && electron-builder --mac --x64 --publish never",
+    "package:mac": "npm run build:desktop && electron-builder --mac --publish never",
     "release:verify": "node scripts/verify-release.mjs",
     "release:manifest": "node scripts/release-manifest.mjs",
     "release:checksums": "node scripts/release-checksums.mjs",
