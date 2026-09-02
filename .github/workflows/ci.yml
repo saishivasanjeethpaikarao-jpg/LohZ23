@@ -22,12 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -59,8 +59,8 @@ jobs:
     env:
       LOHZ_SIGNING_CONFIGURED: ${{ secrets.CSC_LINK != '' || secrets.WIN_CSC_LINK != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -107,13 +107,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+      - name: Consolidate release artifacts
+        run: node scripts/combine-release-artifacts.mjs release-artifacts publish
       - name: Publish prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           ref_name="${GITHUB_REF_NAME:-manual-${GITHUB_RUN_NUMBER}}"
-          mapfile -t files < <(find release-artifacts -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.zip' -o -name 'SHA256SUMS.txt' -o -name 'release-manifest.json' \) -print)
+          mapfile -t files < <(find publish -maxdepth 1 -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.zip' -o -name 'SHA256SUMS.txt' -o -name 'release-manifest.json' \) -print)
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No release artifacts were downloaded" >&2
             exit 1
