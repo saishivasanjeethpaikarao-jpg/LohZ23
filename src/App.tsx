@@ -970,6 +970,7 @@ export default function App() {
       {/* HEADER SECTION - Minimalist typography & interactive controls */}
       <header className="relative z-30 flex items-center justify-between w-full max-w-5xl mx-auto select-none">
         <div className="flex items-center gap-2">
+          <img src="/assets/branding/lohz-mark.svg" alt="" aria-hidden="true" className="size-7" />
           <span className="text-sm font-semibold tracking-[0.4em] text-white/50 uppercase font-sans">
             LOHZ
           </span>
@@ -1490,8 +1491,10 @@ export default function App() {
             <Tooltip content={`Windows Agent: ${agentStatus.online ? 'Online' : agentStatus.connecting ? 'Connecting' : 'Offline'}`} side="left">
               <button 
                 onClick={() => {
-                  // Could open agent logs or status page
+                  setInitialSettingsTab("agent");
+                  setIsSettingsOpen(true);
                 }}
+                aria-label="Open Windows Agent settings"
                 className={`absolute left-[-60px] p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition duration-150 cursor-pointer ${
                   agentStatus.online ? 'bg-emerald-500/20' : 
                   agentStatus.connecting ? 'bg-amber-500/20 animate-pulse' : 

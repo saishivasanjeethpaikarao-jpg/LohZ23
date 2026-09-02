@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CuriosityStore } from "./store";
 import { CURIOSITY_LIMITS, type CuriosityInteraction, type KnowledgeGap } from "./types";
+import { runtimeDataRoot } from "../runtimePaths";
 
 interface CuriosityData {
   uid: string;
@@ -25,7 +26,7 @@ function safeUid(uid: string): string {
 export class LocalCuriosityStore implements CuriosityStore {
   private root: string;
   private queues = new Map<string, Promise<void>>();
-  constructor(root = path.join(process.cwd(), "data", "phase42-curiosity")) {
+  constructor(root = runtimeDataRoot("phase42-curiosity")) {
     this.root = path.resolve(root);
     fs.mkdirSync(this.root, { recursive: true });
   }

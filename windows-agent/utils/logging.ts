@@ -5,11 +5,9 @@
  */
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "node:url";
+import { runtimeDataRoot } from "../../src/lib/runtimePaths";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const LOG_DIR = path.join(__dirname, "logs");
+const LOG_DIR = runtimeDataRoot("windows-agent", "logs");
 
 // Log filenames are strictly generated: agent-YYYY-MM-DD.log. Anything else is rejected.
 const SAFE_LOG_NAME = /^agent-\d{4}-\d{2}-\d{2}\.log$/;

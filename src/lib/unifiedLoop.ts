@@ -14,6 +14,7 @@ import { Memory } from "./memoryTypes";
 import {
   CognitiveState,
   DEFAULT_COGNITIVE_STATE,
+  UnifiedCognitiveStatus,
 } from "./cognitiveState";
 import { DecisionEngine } from "./decisionEngine";
 import { TaskPlanner, Plan } from "./taskPlanner";
@@ -143,6 +144,7 @@ export interface LoopSnapshot {
   silenceDuration: number;
   pendingTasks: number;
   planStatus: string | null;
+  status: UnifiedCognitiveStatus;
   modelUsage: ModelUsage;
   aborted: boolean;
   abortReason: string | null;
@@ -383,6 +385,7 @@ export class UnifiedCognitiveArchitecture {
         (t) => t.status === "pending" || t.status === "in_progress"
       ).length,
       planStatus: activePlan ? activePlan.status : null,
+      status: this.getStatusForState(state),
       modelUsage: this.budget.usage(),
       aborted: this.abortedFlag,
       abortReason: this.abortReason,
@@ -519,9 +522,36 @@ export class UnifiedCognitiveArchitecture {
     if (!state) {
       state = structuredCloneState(DEFAULT_COGNITIVE_STATE);
       state.lastUserActivity = Date.now();
+      state.status = "UNCERTAIN";
       this.states.set(userId, state);
     }
     return state;
+  }
+
+  private getStatusForState(state: CognitiveState): UnifiedCognitiveStatus {
+    const recent = state.workingMemory.recentToolActions;
+    if (recent.some((a) => !a.success)) return "FAILED";
+    if (state.pendingTasks.some((task) => task.status === "blocked")) return "BLOCKED";
+    const text = state.workingMemory.currentConversation
+      .map((turn) => turn.content)
+      .join(" ")
+      .toLowerCase();
+    if (/(not enough evidence|don't have enough evidence|insufficient evidence|need more info|need clarification|uncertain)/i.test(text)) {
+      return "UNCERTAIN";
+    }
+    if (state.workingMemory.currentConversation.some((turn) => turn.role === "assistant")) {
+      return "SUCCESS";
+    }
+    return state.status ?? "UNCERTAIN";
+  }
+
+  private updateStatus(userId: string, state: CognitiveState): void {
+    const next = this.getStatusForState(state);
+    state.status = next;
+    this.lastDecisions.set(userId, {
+      decision: this.lastDecisions.get(userId)?.decision ?? "LISTEN",
+      reason: this.lastDecisions.get(userId)?.reason ?? "authoritative lifecycle update",
+    });
   }
 
   private cooldownsFor(userId: string): UserCooldowns {
@@ -619,6 +649,9 @@ export class UnifiedCognitiveArchitecture {
     const sit = this.situations.getState(event.userId);
     state.currentTopic = sit.currentTopic;
     state.userIntent = sit.userIntent;
+    state.status = /(?:not enough evidence|don't have enough evidence|insufficient evidence|need more info|need clarification|uncertain)/i.test(text)
+      ? "UNCERTAIN"
+      : "SUCCESS";
 
     this.retrieveRelevantMemories(event.userId, state);
 
@@ -686,6 +719,7 @@ export class UnifiedCognitiveArchitecture {
       { tool: payload.tool, success: payload.success },
       event.timestamp
     );
+    state.status = payload.success ? "SUCCESS" : "FAILED";
 
     // Observe the real result — never assume success.
     this.rememberObservation(event.userId, payload.tool, payload.success);
@@ -850,6 +884,7 @@ export class UnifiedCognitiveArchitecture {
       timestamp: now,
     });
     trim(state.workingMemory.currentConversation, MAX_CONVERSATION);
+    state.status = "SUCCESS";
     this.processSituation(userId, "LOHZ_RESPONSE", { description: text }, now);
   }
 

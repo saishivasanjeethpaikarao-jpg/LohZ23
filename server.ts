@@ -13,7 +13,8 @@ import {
   processConversationSlice 
 } from "./server_memory";
 import { Memory } from "./src/lib/memoryTypes";
-import { getAgentBridge } from "./agentBridge";
+import { AgentBridge, getAgentBridge } from "./agentBridge";
+import { getPlatformCapabilities } from "./src/lib/platform/capabilities";
 import { getTool } from "./windows-agent/toolRegistry";
 import { credentialStore } from "./src/credentialStore";
 import { authMiddleware, verifyToken, initFirebaseAdmin, AuthenticatedRequest } from "./server/authMiddleware";
@@ -68,6 +69,7 @@ import type { LearningStore, SkillStep } from "./src/lib/learning";
 import { SkillLibrary } from "./src/lib/skills/library";
 import { toolRecordFingerprint } from "./src/lib/skills/fingerprint";
 import { parseSkillPlanConstraint } from "./src/lib/skills/plan";
+import { CuriosityService, LocalCuriosityStore } from "./src/lib/curiosity";
 import { ConversationSession, ProviderOutputGate, TranscriptAccumulator, decideResponseEligibility } from "./src/lib/conversation";
 import type { ConversationMemoryLine, ConversationMemoryScope } from "./server_memory";
 import {
@@ -97,12 +99,15 @@ import {
 } from "./src/lib/selfCoding";
 import type { SelfCodingStore } from "./src/lib/selfCoding";
 import { registerSelfCodingRoutes } from "./server/selfCoding";
+import { registerSelfMaintenanceRoutes } from "./server/selfMaintenance";
+import { DiagnosticEngine, LocalMaintenanceHistoryStore, RepositoryInspector } from "./src/lib/selfMaintenance";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
+  const BIND_HOST = process.env.LOHZ_BIND_HOST || "0.0.0.0";
   
   app.use(express.json());
 
@@ -129,9 +134,35 @@ async function startServer() {
   // Phase 35 — restart-safe world state exists even when Firestore is offline.
   app.locals.worldModel = new WorldModelService(new LocalFileWorldStateStore());
 
+  // Phase 42 — knowledge-gap / curiosity service (EXPERIMENTAL).
+  // Record-and-recommend ONLY: it holds no executor, makes no model
+  // calls, and never surfaces anything to the user on its own.
+  const curiosityStore = new LocalCuriosityStore();
+  app.locals.curiosityService = new CuriosityService({
+    store: curiosityStore,
+    providers: {
+      hasRelevantMemory: async (uid, question) => {
+        try {
+          const mems = (await getDefaultMemoryStore().load(uid)) ?? [];
+          const tokens = question.toLowerCase().split(/[^a-z0-9]+/).filter((tok) => tok.length >= 4).slice(0, 8);
+          return tokens.length > 0 && mems.some((m) => tokens.some((tok) => typeof m.text === "string" && m.text.toLowerCase().includes(tok)));
+        } catch { return false; }
+      },
+      hasCurrentWorldFact: async (uid, missing) => {
+        try {
+          const world = app.locals.worldModel as WorldModelService | undefined;
+          return world ? (await world.retrieveRelevant(uid, missing, 1)).length > 0 : false;
+        } catch { return false; }
+      },
+      // Read-only registry probes are LOW risk; actual execution stays with
+      // the authorized executor. This service never calls tools.
+      probeIsSafe: () => true,
+    },
+  });
+
   // Start the agent bridge to connect to Windows Agent
-  const agentBridge = getAgentBridge();
-  agentBridge.start();
+  const agentBridge = process.platform === "win32" ? getAgentBridge() : new AgentBridge({ token: "platform-unavailable" });
+  if (process.platform === "win32") agentBridge.start();
 
   // Phase 22 — once the Admin SDK is initialised, route the default
   // memory store through Firestore. The auth middleware populates
@@ -142,17 +173,18 @@ async function startServer() {
   // Phase 24 — read-only user model surface (derived state only).
   registerUserModelRoutes(app);
   registerWorldModelRoutes(app);
+  registerCuriosityRoutes(app);
 
   // Phase 27 — fast intent router. Works offline (Tier 0/1) even without
   // Firestore or a connected agent; gateway failures degrade gracefully.
   // Phase 28 — hierarchical planner rides the tier3 seam (PLANNING ONLY:
   // it never executes tools; Phase 29 owns execution).
-  const TOOL_NAMES = [
+  const TOOL_NAMES = process.platform === "win32" ? [
     "openApp", "closeApp", "focusApp", "createFile", "readFile", "writeFile",
     "createFolder", "renameFile", "openUrl", "listWindows", "focusWindow",
     "minimizeWindow", "maximizeWindow", "takeScreenshot", "clipboardRead",
     "clipboardWrite", "getSystemInfo", "getVolume", "setVolume",
-  ];
+  ] : [];
   // Phase 37 — one operational self-model. The legacy SelfEvaluationEngine
   // remains task-outcome learning; this engine owns only measured runtime health.
   const selfModelStore: SelfModelStore = app.locals.selfModelPersistence ?? new LocalSelfModelStore();
@@ -446,9 +478,12 @@ async function startServer() {
   // Phase 43 — repository-scoped inspection and proposal-only self-coding.
   // Fixed sandbox checks and explicit admin approval are required before the
   // controlled patch applier can touch the repository. There is no deploy API.
-  const controlledRepository = new ControlledRepository(process.cwd());
+  const controlledRepository = new ControlledRepository(process.env.LOHZ_APP_ROOT || process.cwd());
+  const maintenanceInspector = new RepositoryInspector(process.env.LOHZ_APP_ROOT || process.cwd());
+  const maintenanceDiagnostics = new DiagnosticEngine();
+  const maintenanceHistory = new LocalMaintenanceHistoryStore();
   const selfCodingStore: SelfCodingStore = app.locals.selfCodingPersistence ?? new LocalSelfCodingStore();
-  const fixedSandbox = new FixedSandboxExecutor(process.cwd());
+  const fixedSandbox = new FixedSandboxExecutor(process.env.LOHZ_APP_ROOT || process.cwd());
   const codeChangeProposalEngine = new CodeChangeProposalEngine({
     repository: controlledRepository,
     store: selfCodingStore,
@@ -722,6 +757,7 @@ async function startServer() {
   registerCognitiveEntryRoutes(app, { planStore, executionStore, executionEngine: observedEngine });
   registerExecutionSessionRoutes(app, { coordinator: executionSessionCoordinator, planStore, executionEngine: observedEngine });
   registerSelfCodingRoutes(app, { engine: codeChangeProposalEngine, repository: controlledRepository, repairs: autonomousRepairEngine, monitor: repairMonitor, isAdmin: (uid) => isCredentialAdmin(uid) });
+  registerSelfMaintenanceRoutes(app, { inspector: maintenanceInspector, diagnostics: maintenanceDiagnostics, history: maintenanceHistory, refreshHealth: (uid) => healthCoordinator.refresh(uid), isAdmin: (uid) => isCredentialAdmin(uid) });
   registerLearningRoutes(app, {
     store: learningStore,
     experienceBuilder,
@@ -741,6 +777,11 @@ async function startServer() {
     res.json(snapshot);
   });
 
+  app.get("/api/platform/capabilities", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ platform: process.platform, capabilities: getPlatformCapabilities() });
+  });
+
   app.get("/api/self-model/capabilities", async (req, res) => {
     const uid = (req as AuthenticatedRequest).userId!;
     const snapshot = await healthCoordinator.refresh(uid);
@@ -750,7 +791,7 @@ async function startServer() {
   });
 
   app.get("/api/agent/status", (_req, res) => {
-    const status = getAgentBridge().getStatus();
+    const status = agentBridge.getStatus();
     res.json({ ...status, logs: [] });
   });
 
@@ -2020,7 +2061,8 @@ console.log("[LOHZ] Step 2: Checking Gemini API key...");
   });
 
   // Serve custom static assets folder
-  app.use("/assets", express.static(path.join(process.cwd(), "assets")));
+  const appRoot = process.env.LOHZ_APP_ROOT || process.cwd();
+  app.use("/assets", express.static(path.join(appRoot, "assets")));
 
   // Express Static assets / Vite Dev Middleware configuration
   if (process.env.NODE_ENV !== "production") {
@@ -2030,15 +2072,15 @@ console.log("[LOHZ] Step 2: Checking Gemini API key...");
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(appRoot, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Running on http://localhost:${PORT}`);
+  server.listen(PORT, BIND_HOST, () => {
+    console.log(`[Server] Running on http://${BIND_HOST}:${PORT}`);
   });
 }
 
@@ -2425,6 +2467,26 @@ function registerLearningRoutes(app: express.Express, deps: LearningRouteDeps): 
     if (!deps.skillLibrary) { res.status(503).json({ error: "skill library unavailable" }); return; }
     const report = await deps.skillLibrary.revalidateAgainstRegistry(uid);
     res.json(report);
+  });
+}
+
+/** Phase 42 — read-only curiosity surface (EXPERIMENTAL; no execution path exists here). */
+export function registerCuriosityRoutes(app: express.Express): void {
+  const service = () => app.locals.curiosityService as CuriosityService | undefined;
+  app.get("/api/curiosity/gaps", async (req, res) => {
+    const uid = (req as AuthenticatedRequest).userId!;
+    const svc = service();
+    if (!svc) { res.status(503).json({ error: "curiosity unavailable" }); return; }
+    res.json({ gaps: await svc.listOpen(uid) });
+  });
+  app.post("/api/curiosity/gaps/:gapId/dismiss", async (req, res) => {
+    const uid = (req as AuthenticatedRequest).userId!;
+    const svc = service();
+    if (!svc) { res.status(503).json({ error: "curiosity unavailable" }); return; }
+    const gapId = String(req.params.gapId ?? "").slice(0, 120);
+    if (!/^gap_[a-z0-9]+$/i.test(gapId)) { res.status(400).json({ error: "invalid gapId" }); return; }
+    const ok = await svc.dismiss(uid, gapId);
+    res.status(ok ? 200 : 404).json({ dismissed: ok });
   });
 }
 

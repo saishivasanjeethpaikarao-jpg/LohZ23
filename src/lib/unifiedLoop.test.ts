@@ -414,6 +414,29 @@ describe("UnifiedCognitiveArchitecture — end-to-end cognitive loop", () => {
     });
   });
 
+  describe("authoritative status contract", () => {
+    it("tracks success and failure in the authoritative state", () => {
+      const { loop } = makeHarness({ eagerSpeaker: true });
+
+      loop.submitText("What is TypeScript good for");
+      expect(loop.getCognitiveState().status).toBe("SUCCESS");
+      expect(loop.snapshot().status).toBe("SUCCESS");
+
+      loop.requestTool("web_search", "Find docs");
+      loop.reportToolResult("web_search", { error: "permission denied" }, false);
+
+      expect(loop.getCognitiveState().status).toBe("FAILED");
+      expect(loop.snapshot().status).toBe("FAILED");
+    });
+
+    it("marks insufficient evidence as uncertain instead of claiming success", () => {
+      const { loop } = makeHarness();
+      loop.submitText("I need a decision but I don't have enough evidence");
+      expect(loop.getCognitiveState().status).toBe("UNCERTAIN");
+      expect(loop.snapshot().status).toBe("UNCERTAIN");
+    });
+  });
+
   describe("loop safety", () => {
     it("drops duplicate event ids", () => {
       const { loop } = makeHarness();

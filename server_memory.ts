@@ -7,8 +7,9 @@ import type { MemoryStore } from "./src/lib/persistence/memoryStore";
 import { LocalFileMemoryStore } from "./src/lib/persistence/localFileMemoryStore";
 import { extractCandidates } from "./src/lib/memoryIntelligence/extraction";
 import { DEFAULT_MEMORY_BUDGET } from "./src/lib/memoryIntelligence/types";
+import { runtimeDataRoot } from "./src/lib/runtimePaths";
 
-const MEMORY_DIR = path.join(process.cwd(), "data", "memories");
+const MEMORY_DIR = runtimeDataRoot("memories");
 
 const MEMORY_EXTRACTION_SCHEMA = {
   type: Type.OBJECT,

@@ -2,11 +2,27 @@ node_modules/
 .tools/
 build/
 dist/
+dist-desktop/
+release/
+release-qa/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+secrets/
+credentials/
+*.db
+*.sqlite
+*.sqlite3
+tmp/
+.cache/
 .agent-token
 windows-agent/logs/
 windows-agent/screenshots/
@@ -46,6 +62,7 @@ hive/
 roster-backups/
 roster.json
 checklist.json
+.freebuff/
 .mcp.json
 
 # User memory data (per-user scoped)

@@ -92,7 +92,15 @@ export function rankGapActions(gap: Pick<KnowledgeGap, "possibleSources" | "sour
       if (!PROBE_RELEVANT.has(gap.source)) { gain *= 0.3; rationale.push("probe irrelevant to this gap kind"); }
     }
     if (source === "inspect_state") {
-      if (!ctx.worldHasAnswer) { gain *= 0.15; rationale.push("no current world assertion"); }
+      if (ctx.worldHasAnswer) {
+        // Reading an already-current assertion is cheaper and more direct
+        // than probing the environment again.
+        gain = Math.max(gain, 0.9);
+        rationale.push("current world assertion available");
+      } else {
+        gain *= 0.15;
+        rationale.push("no current world assertion");
+      }
       if (!STATE_RELEVANT.has(gap.source)) { gain *= 0.4; rationale.push("state query marginal here"); }
     }
     if (source === "use_memory" && !ctx.memoryHasAnswer) {

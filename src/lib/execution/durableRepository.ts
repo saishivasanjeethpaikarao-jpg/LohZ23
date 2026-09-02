@@ -13,6 +13,7 @@ import type { Observation } from "../observation/types";
 import { OBSERVATION_LIMITS } from "../observation/types";
 import type { ExecutionStore } from "./persistence";
 import type { ExecutionRecord } from "./types";
+import { runtimeDataRoot } from "../runtimePaths";
 import type { IdempotencyRecord, IdempotencyStore } from "./idempotency";
 import type { ExecutionLease, ExecutionLeaseStore } from "./executionLease";
 
@@ -38,7 +39,7 @@ function safeUid(uid: string): string {
 export class DurableExecutionRepository implements PlanStore, ExecutionStore, ObservationStore, IdempotencyStore, ExecutionLeaseStore {
   private readonly root: string;
 
-  constructor(root = path.join(process.cwd(), "data", "phase33")) {
+  constructor(root = runtimeDataRoot("phase33")) {
     this.root = path.resolve(root);
     fs.mkdirSync(this.root, { recursive: true });
     fs.mkdirSync(path.join(this.root, "leases"), { recursive: true });

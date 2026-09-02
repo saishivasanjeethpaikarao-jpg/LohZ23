@@ -10,8 +10,9 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { runtimePrivateFile } from "../src/lib/runtimePaths";
 
-const TOKEN_FILE = path.resolve(process.cwd(), ".agent-token");
+const TOKEN_FILE = runtimePrivateFile(".agent-token");
 const ENV_NAME = "LOHZ_AGENT_TOKEN";
 
 export function resolveToken(): { token: string; source: "env" | "file" | "generated" } {

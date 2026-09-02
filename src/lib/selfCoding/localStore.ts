@@ -6,6 +6,7 @@ import type { CodeChangeAuditEvent, CodeChangeProposal } from "./types";
 import { SELF_CODING_LIMITS } from "./types";
 import type { BugIncident, RegressionMemory } from "./repairTypes";
 import { REPAIR_LIMITS } from "./repairTypes";
+import { runtimeDataRoot } from "../runtimePaths";
 
 interface Data {
   uid: string;
@@ -26,7 +27,7 @@ function key(id: string, version: number): string { return `${id}:v${version}`; 
 export class LocalSelfCodingStore implements SelfCodingStore {
   private readonly root: string;
   private readonly queues = new Map<string, Promise<void>>();
-  constructor(root = path.join(process.cwd(), "data", "phase43-self-coding")) { this.root = path.resolve(root); fs.mkdirSync(this.root, { recursive: true }); }
+  constructor(root = runtimeDataRoot("phase43-self-coding")) { this.root = path.resolve(root); fs.mkdirSync(this.root, { recursive: true }); }
   private file(uid: string): string { return path.join(this.root, `${safeUid(uid)}.json`); }
   private load(uid: string): Data {
     const file = this.file(uid); if (!fs.existsSync(file)) return { uid, schemaVersion: 1, proposals: {}, audit: {}, incidents: {}, regressionMemories: {}, updatedAt: Date.now() };

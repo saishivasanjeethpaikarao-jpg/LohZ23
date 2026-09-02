@@ -75,9 +75,12 @@ export function detectGap(input: GapDetectionInput): GapSeed | null {
 
   // Router needed clarification / intent confidence too low to act safely.
   if (input.askedClarification || input.confidence < 0.6) {
+    const topic = clip(input.inputText ?? input.intent, 100);
     return {
-      question: `What did the user actually mean by "${clip(input.inputText ?? input.intent, 100)}"?`,
-      missingInformation: "user intent disambiguation",
+      question: `What did the user actually mean by "${topic}"?`,
+      // The topic is part of the identity so unrelated ambiguous requests do
+      // not collapse into one permanent generic gap.
+      missingInformation: `user intent disambiguation for '${topic}'`,
       importance: 0.65,
       uncertainty: 0.8,
       possibleSources: ["ask_user"],

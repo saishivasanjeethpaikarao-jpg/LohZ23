@@ -24,6 +24,21 @@ export function registerCognitiveEntryRoutes(app: express.Express, deps: Cogniti
     try {
       const requestId = randomUUID();
       const outcome = await pipeline.handleAuthenticatedText(userId, text.slice(0, 2000), { requestId });
+      // Phase 42 — record knowledge gaps observed during this route.
+      // Best-effort: curiosity capture NEVER changes or delays the response.
+      try {
+        const curiosity = app.locals.curiosityService as import("../src/lib/curiosity").CuriosityService | undefined;
+        if (curiosity) {
+          void curiosity.captureRouteOutcome(userId, {
+            intent: outcome.intent,
+            confidence: outcome.confidence,
+            success: outcome.success,
+            verificationStatus: outcome.verificationStatus,
+            askedClarification: outcome.lifecycle.includes("ASK"),
+            inputText: text.slice(0, 500),
+          });
+        }
+      } catch { /* gap capture is observational only */ }
       res.json({
         requestId: outcome.requestId, tier: outcome.tier, intent: outcome.intent,
         confidence: outcome.confidence, success: outcome.success, response: outcome.response,

@@ -101,7 +101,7 @@ export function createAgentApp(
 }
 
 export function ensureWorkspaceDirs() {
-  const root = path.resolve(process.cwd());
+  const root = path.resolve(process.env.LOHZ_DATA_DIR || process.cwd());
   const logsDir = path.join(root, "windows-agent", "logs");
   const shotsDir = path.join(root, "windows-agent", "screenshots");
   for (const dir of [logsDir, shotsDir]) {

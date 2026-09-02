@@ -173,9 +173,12 @@ export class CuriosityService {
     const gap = await this.deps.store.getGap(uid, gapId);
     if (!gap || gap.status === "resolved") return false;
     const now = this.now();
-    gap.status = "resolved";
-    gap.uncertainty = gap.importance >= 0.8
-      ? Math.max(0.2, gap.uncertainty - 0.5)  // unverified: partial reduction only
+    const highImportance = gap.importance >= 0.8;
+    // A user report is useful evidence, but it does not verify a high-stakes
+    // execution outcome. Keep that gap open for an observation/probe.
+    gap.status = highImportance ? "probing" : "resolved";
+    gap.uncertainty = highImportance
+      ? Math.max(0.2, gap.uncertainty - 0.5)
       : Math.max(0, gap.uncertainty - 0.85);
     gap.resolution = { kind: "user_answer", note: String(answer).slice(0, 200) };
     gap.updatedAt = now;

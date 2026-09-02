@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { ExecutionSessionStore } from "./sessionStore";
 import type { ExecutionSession, SessionLease, SessionLeaseClaim } from "./sessionTypes";
 import { EXECUTION_SESSION_LIMITS } from "./sessionTypes";
+import { runtimeDataRoot } from "../runtimePaths";
 
 function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T; }
 function safe(value: string, label: string): string {
@@ -14,7 +15,7 @@ function safe(value: string, label: string): string {
 /** Restart-safe single-host fallback. Multi-server production uses FirestoreExecutionSessionStore. */
 export class LocalExecutionSessionStore implements ExecutionSessionStore {
   private readonly root: string;
-  constructor(root = path.join(process.cwd(), "data", "phase41"), private readonly now: () => number = Date.now) {
+  constructor(root = runtimeDataRoot("phase41"), private readonly now: () => number = Date.now) {
     this.root = path.resolve(root);
     fs.mkdirSync(path.join(this.root, "sessions"), { recursive: true });
     fs.mkdirSync(path.join(this.root, "leases"), { recursive: true });

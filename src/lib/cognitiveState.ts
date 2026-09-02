@@ -1,4 +1,5 @@
 export type CognitiveDecision = "SPEAK" | "LISTEN" | "WAIT" | "ASK" | "ACT" | "IGNORE";
+export type UnifiedCognitiveStatus = "SUCCESS" | "FAILED" | "UNCERTAIN" | "NEEDS_USER" | "BLOCKED";
 
 export interface DecisionReason {
   decision: CognitiveDecision;
@@ -21,6 +22,7 @@ export interface CognitiveState {
   lastLohzSpeech: number;
   silenceDuration: number;
   conversationState: "active" | "paused" | "ended" | "awaiting_response";
+  status?: UnifiedCognitiveStatus;
   pendingTasks: PendingTask[];
 }
 
@@ -116,5 +118,6 @@ export const DEFAULT_COGNITIVE_STATE: CognitiveState = {
   lastLohzSpeech: 0,
   silenceDuration: 0,
   conversationState: "active",
+  status: "UNCERTAIN",
   pendingTasks: [],
 };

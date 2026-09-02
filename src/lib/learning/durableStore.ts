@@ -4,6 +4,7 @@ import type { LearningStore } from "./store";
 import type { ExperienceRecord, ExperienceReflection, LessonRecord, SkillReliabilityRecord, SkillVersion, ToolReliabilityRecord } from "./types";
 import type { AdaptationVersion, DecisionObservation } from "../adaptation/types";
 import { LEARNING_LIMITS } from "./types";
+import { runtimeDataRoot } from "../runtimePaths";
 
 interface LearningData {
   uid: string;
@@ -30,7 +31,7 @@ function key(...parts: Array<string | number>): string { return parts.join("::")
 export class LocalLearningStore implements LearningStore {
   private root: string;
   private queues = new Map<string, Promise<void>>();
-  constructor(root = path.join(process.cwd(), "data", "phase36-learning")) {
+  constructor(root = runtimeDataRoot("phase36-learning")) {
     this.root = path.resolve(root); fs.mkdirSync(this.root, { recursive: true });
   }
   private file(uid: string): string { return path.join(this.root, `${safeUid(uid)}.json`); }

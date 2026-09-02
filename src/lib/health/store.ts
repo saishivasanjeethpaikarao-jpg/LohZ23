@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SelfModelDocument } from "./types";
+import { runtimeDataRoot } from "../runtimePaths";
 
 export interface SelfModelTransaction<T> { document: SelfModelDocument; result: T; }
 
@@ -52,7 +53,7 @@ export class LocalSelfModelStore implements SelfModelStore {
   private root: string;
   private queues = new Map<string, Promise<void>>();
 
-  constructor(root = path.join(process.cwd(), "data", "self-model")) {
+  constructor(root = runtimeDataRoot("self-model")) {
     this.root = path.resolve(root);
     fs.mkdirSync(this.root, { recursive: true });
   }

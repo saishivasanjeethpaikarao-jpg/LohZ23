@@ -1,10 +1,25 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+:root {
+  --lohz-bg: #070b14;
+  --lohz-surface: rgba(17, 24, 39, .72);
+  --lohz-surface-strong: #101827;
+  --lohz-text: #f5fbff;
+  --lohz-muted: #91a0b8;
+  --lohz-accent: #56e7ff;
+  --lohz-accent-alt: #8b7bff;
+  --lohz-focus: #8fefff;
+  --lohz-radius: 14px;
+  --lohz-motion: 180ms;
+}
+
+*:focus-visible { outline: 2px solid var(--lohz-focus); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Aptos Display", "Segoe UI Variable", sans-serif;
+  --font-mono: "Cascadia Code", Consolas, ui-monospace, monospace;
 }
 
 /* Custom smooth transition classes */

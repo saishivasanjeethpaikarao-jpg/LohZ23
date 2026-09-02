@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { WorldAssertion, WorldStateDocument } from "./types";
+import { runtimeDataRoot } from "../runtimePaths";
 
 export interface WorldTransaction<T> {
   assertions: WorldAssertion[];
@@ -58,7 +59,7 @@ export class LocalFileWorldStateStore implements WorldStateStore {
   private readonly root: string;
   private readonly queues = new Map<string, Promise<void>>();
 
-  constructor(root = path.join(process.cwd(), "data", "world-state")) {
+  constructor(root = runtimeDataRoot("world-state")) {
     this.root = path.resolve(root);
     fs.mkdirSync(this.root, { recursive: true });
   }

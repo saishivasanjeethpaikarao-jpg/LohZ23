@@ -13,6 +13,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import net from "net";
+import { runtimeDataRoot } from "../../src/lib/runtimePaths";
 
 export interface SafePathResolution {
   ok: boolean;
@@ -29,7 +30,7 @@ function getWorkspaceRoot(): string {
   if (custom && custom.trim()) {
     return path.resolve(custom.trim());
   }
-  return path.join(process.cwd(), "windows-agent", "workspace");
+  return process.env.LOHZ_DATA_DIR ? runtimeDataRoot("windows-agent", "workspace") : path.join(process.cwd(), "windows-agent", "workspace");
 }
 
 /** Ordered list of allowed roots. Later prefix checks are case-insensitive (win32). */
@@ -187,7 +188,8 @@ export function isSafeBasename(name: string): boolean {
 }
 
 export function ensureWorkspaceDirs(): void {
-  for (const dir of [getWorkspaceRoot(), path.join(process.cwd(), "windows-agent", "screenshots")]) {
+  const screenshots = process.env.LOHZ_DATA_DIR ? runtimeDataRoot("windows-agent", "screenshots") : path.join(process.cwd(), "windows-agent", "screenshots");
+  for (const dir of [getWorkspaceRoot(), screenshots]) {
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     } catch (err) {

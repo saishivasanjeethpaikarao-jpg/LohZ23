@@ -14,6 +14,7 @@ import { WebSocket } from "ws";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { resolveToken as resolveAgentToken } from "./windows-agent/auth";
+import { runtimePrivateFile } from "./src/lib/runtimePaths";
 
 export type AgentStatus = {
   online: boolean;
@@ -38,7 +39,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3001;
 
 function readPersistedToken(): string | null {
-  const tokenPath = path.resolve(process.cwd(), ".agent-token");
+  const tokenPath = runtimePrivateFile(".agent-token");
   if (!existsSync(tokenPath)) return null;
   try {
     const raw = readFileSync(tokenPath, "utf8").trim();

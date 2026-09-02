@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { runtimePrivateFile } from "./lib/runtimePaths";
 
 interface EncryptedCredential {
   iv: string;
@@ -12,6 +13,7 @@ type CredentialFile = Record<string, EncryptedCredential>;
 export interface CredentialStoreOptions {
   keyFile?: string;
   credentialsFile?: string;
+  key?: Buffer;
 }
 
 function validProvider(provider: string): boolean {
@@ -40,16 +42,30 @@ export class CredentialStore {
   private mutations: Promise<void> = Promise.resolve();
   private readonly keyFile: string;
   private readonly credentialsFile: string;
+  private readonly providedKey?: Buffer;
 
   constructor(opts: CredentialStoreOptions = {}) {
-    this.keyFile = path.resolve(opts.keyFile ?? path.join(process.cwd(), ".credential_store_key"));
-    this.credentialsFile = path.resolve(opts.credentialsFile ?? path.join(process.cwd(), ".credentials.enc"));
+    this.keyFile = path.resolve(opts.keyFile ?? runtimePrivateFile(".credential_store_key"));
+    this.credentialsFile = path.resolve(opts.credentialsFile ?? runtimePrivateFile(".credentials.enc"));
+    this.providedKey = opts.key ? Buffer.from(opts.key) : undefined;
   }
 
   async init(): Promise<void> {
     if (this.key) return;
     if (!this.initWork) {
       this.initWork = Promise.resolve().then(() => {
+        if (this.providedKey) {
+          if (this.providedKey.length !== 32) throw new Error("Credential encryption key must be exactly 32 bytes");
+          this.key = Buffer.from(this.providedKey);
+          return;
+        }
+        const envKey = process.env.LOHZ_CREDENTIAL_KEY_B64;
+        if (envKey) {
+          const key = Buffer.from(envKey, "base64");
+          if (key.length !== 32) throw new Error("LOHZ_CREDENTIAL_KEY_B64 must decode to 32 bytes");
+          this.key = key;
+          return;
+        }
         fs.mkdirSync(path.dirname(this.keyFile), { recursive: true });
         let key: Buffer;
         if (fs.existsSync(this.keyFile)) {

@@ -1,0 +1,55 @@
+appId: com.lohz.desktop
+productName: LOHZ
+artifactName: LOHZ-${version}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-desktop/**/*
+  - assets/**/*
+  - package.json
+  - node_modules/**/*
+  - '!**/*.map'
+  - '!**/*.test.*'
+  - '!docs/**/*'
+  - '!src/**/*'
+asar: true
+win:
+  target:
+    - nsis
+  icon: assets/branding/icon.svg
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: LOHZ
+  artifactName: LOHZ-Setup-${version}-${arch}.exe
+linux:
+  target:
+    - deb
+    - AppImage
+  syncDesktopName: true
+  category: Utility
+  icon: assets/branding/icon.svg
+  maintainer: LOHZ
+mac:
+  target:
+    - dir
+    - dmg
+  icon: assets/branding/icon.svg
+  category: public.app-category.productivity
+  hardenedRuntime: true
+dmg:
+  title: LOHZ ${version}
+  backgroundColor: '#070b14'
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

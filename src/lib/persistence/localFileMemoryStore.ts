@@ -11,8 +11,9 @@ import fs from "fs/promises";
 import path from "path";
 import type { Memory } from "../memoryTypes";
 import type { MemoryStore } from "./memoryStore";
+import { runtimeDataRoot } from "../runtimePaths";
 
-const MEMORY_DIR = path.join(process.cwd(), "data", "memories");
+const MEMORY_DIR = runtimeDataRoot("memories");
 
 function safeUid(uid: string): string {
   if (!uid || uid.includes("/") || uid.includes("..") || uid.includes("\0")) {

@@ -7,13 +7,14 @@
 import fs from "fs";
 import path from "path";
 import { runPowerShell } from "../utils/powershell";
+import { runtimeDataRoot } from "../../src/lib/runtimePaths";
 
 function safeFileName(name: string): boolean {
   return /^shot-\d{8}-\d{6}\.png$/.test(name);
 }
 
 function generateScreenshotPath(): { absPath: string; relPath: string } {
-  const dir = path.join(process.cwd(), "windows-agent", "screenshots");
+  const dir = process.env.LOHZ_DATA_DIR ? runtimeDataRoot("windows-agent", "screenshots") : path.join(process.cwd(), "windows-agent", "screenshots");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const now = new Date();
   const pad = (n: number) => n.toString().padStart(2, "0");
