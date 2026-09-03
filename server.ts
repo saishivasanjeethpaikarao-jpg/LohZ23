@@ -856,6 +856,83 @@ async function startServer() {
     }
   });
 
+  // Guest to Permanent Account Idempotent Migration Endpoint
+  app.post("/api/auth/migrate-guest", async (req, res) => {
+    try {
+      const targetUserId = (req as AuthenticatedRequest).userId!;
+      const { guestUid } = req.body ?? {};
+      if (!guestUid || typeof guestUid !== "string" || !guestUid.trim()) {
+        return res.status(400).json({ error: "Source guestUid is required." });
+      }
+      if (guestUid === targetUserId) {
+        return res.json({ success: true, migratedMemories: 0, migratedCredentials: 0, message: "Target and guest are identical. No migration needed." });
+      }
+
+      // 1. Idempotent Memory Migration
+      let guestMemories: Memory[] = [];
+      try {
+        guestMemories = await loadMemories(guestUid);
+      } catch (err) {
+        console.warn(`[Migrate] No existing memories found for guest ${guestUid} or unreadable:`, err);
+      }
+
+      let migratedMemories = 0;
+      if (guestMemories && guestMemories.length > 0) {
+        const targetMemories = await loadMemories(targetUserId);
+        const targetTexts = new Set(targetMemories.map((m) => m.text.trim().toLowerCase()));
+
+        for (const gMem of guestMemories) {
+          if (!targetTexts.has(gMem.text.trim().toLowerCase())) {
+            const timestamp = new Date().toISOString();
+            const migratedMemory: Memory = {
+              ...gMem,
+              id: Math.random().toString(36).substring(2, 11),
+              createdAt: timestamp,
+              updatedAt: timestamp,
+              metadata: {
+                ...gMem.metadata,
+                userId: targetUserId,
+                lastAccessed: Date.now(),
+                lastReinforced: Date.now(),
+              },
+            };
+            const added = await getDefaultMemoryStore().add(targetUserId, migratedMemory);
+            if (added) {
+              migratedMemories++;
+              targetTexts.add(gMem.text.trim().toLowerCase());
+            }
+          }
+        }
+      }
+
+      // 2. Idempotent AI Provider Credential Migration
+      let migratedCredentials = 0;
+      for (const provider of PROVIDERS) {
+        const guestHasCred = await credentialStore.hasCredential(provider, guestUid);
+        const targetHasCred = await credentialStore.hasCredential(provider, targetUserId);
+        if (guestHasCred && !targetHasCred) {
+          const guestVal = await credentialStore.getCredential(provider, guestUid);
+          if (guestVal) {
+            await credentialStore.setCredential(provider, guestVal, targetUserId);
+            migratedCredentials++;
+          }
+        }
+      }
+
+      console.log(`[Migrate] Successfully migrated data from guest ${guestUid} to user ${targetUserId}: ${migratedMemories} memories, ${migratedCredentials} credentials.`);
+      res.json({
+        success: true,
+        sourceUid: guestUid,
+        targetUid: targetUserId,
+        migratedMemories,
+        migratedCredentials,
+      });
+    } catch (e: any) {
+      console.error("[Migrate] Guest migration failed:", e);
+      res.status(500).json({ error: e.message || "Failed to migrate guest identity" });
+    }
+  });
+
   // Credential Management API Endpoints
   const PROVIDERS = ["gemini", "nvidia", "groq", "openai", "anthropic"] as const;
 

@@ -5,6 +5,7 @@ dist/
 dist-desktop/
 release/
 release-qa/
+release-*/
 coverage/
 .DS_Store
 *.log

@@ -15,6 +15,10 @@ files:
   - '!docs/**/*'
   - '!src/**/*'
 asar: true
+protocols:
+  - name: LOHZ Desktop Auth
+    schemes:
+      - lohz
 win:
   target:
     - nsis

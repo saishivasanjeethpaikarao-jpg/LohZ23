@@ -1,5 +1,5 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
-import { getAuth, Auth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, Auth, GoogleAuthProvider, indexedDBLocalPersistence, setPersistence } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,15 +15,22 @@ const hasFirebaseConfig = Boolean(firebaseConfig.apiKey);
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope("profile");
+googleProvider.addScope("email");
 
 if (hasFirebaseConfig) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    // Use IndexedDB persistence so auth state survives Electron renderer
+    // restarts and tab refreshes. This is safe in both browser and Electron.
+    setPersistence(auth, indexedDBLocalPersistence).catch((err) => {
+      console.warn("[Firebase] Could not set IndexedDB persistence (falling back to in-memory):", err);
+    });
   } catch (err) {
     console.warn("[Firebase] Failed to initialize:", err);
   }
 }
 
-export { auth, googleProvider };
+export { app, auth, googleProvider };
 export const isFirebaseEnabled = hasFirebaseConfig && auth !== null;

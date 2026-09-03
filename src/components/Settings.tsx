@@ -71,7 +71,7 @@ function createInitialProviderStates(): Record<Provider, ProviderStatus> {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus, initialTab, proactiveSpeechEnabled = true, onProactiveSpeechChange }) => {
-  const { user, signInWithGoogle, signInAsGuest, signOut: authSignOut, getIdToken } = useAuth();
+  const { user, isGuest, signInWithGoogle, signInAsGuest, upgradeGuestAccount, signOut: authSignOut, getIdToken } = useAuth();
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     try {
       const token = await getIdToken();
@@ -323,6 +323,21 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
                           <span className="text-[11px] font-mono text-emerald-300/80">Active</span>
                         </div>
                       </div>
+
+                      {user.isAnonymous && (
+                        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4 text-center">
+                          <p className="text-[11px] font-mono text-indigo-200 mb-3">
+                            ✦ Link your Google account to keep your memories, skills and credentials safe across devices.
+                          </p>
+                          <button
+                            onClick={upgradeGuestAccount}
+                            className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-mono tracking-widest uppercase font-semibold transition cursor-pointer"
+                          >
+                            <LogIn size={13} />
+                            Upgrade to Google Account
+                          </button>
+                        </div>
+                      )}
 
                       <button
                         onClick={authSignOut}
