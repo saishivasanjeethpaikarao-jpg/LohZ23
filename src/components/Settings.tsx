@@ -225,12 +225,12 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-white/[0.06] border border-white/10 text-white/90">
-                      <Settings2 size={16} />
+                    <div className="w-8 h-8 rounded-xl bg-black border border-white/15 p-1 flex items-center justify-center shadow-md overflow-hidden shrink-0">
+                      <img src="/app-logo.png" alt="LOHZ23" className="w-full h-full object-contain" />
                     </div>
-                    <h2 className="text-[15px] font-semibold tracking-[0.14em] text-white uppercase">LOHZ — Settings</h2>
-                    <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-[10px] font-mono tracking-widest text-indigo-300">
-                      <CircleDot size={10} /> PREMIUM CORE
+                    <h2 className="text-[15px] font-bold tracking-[0.16em] text-white uppercase font-sans">LOHZ23 — Control Center</h2>
+                    <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-[9px] font-mono tracking-widest text-indigo-300">
+                      <CircleDot size={9} /> SYSTEM VAULT
                     </span>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed font-mono tracking-wide text-white/45 max-w-[560px]">
@@ -349,28 +349,30 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center">
-                        <div className="mx-auto w-14 h-14 rounded-full bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center mb-4">
-                          <User size={24} className="text-indigo-300" />
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center relative overflow-hidden">
+                        <div className="mx-auto w-16 h-16 rounded-2xl bg-black border border-white/15 p-2 flex items-center justify-center mb-4 shadow-xl">
+                          <img src="/app-logo.png" alt="LOHZ23" className="w-full h-full object-contain" />
                         </div>
-                        <h4 className="text-[14px] font-medium text-white mb-1">Sign in to LOHZ</h4>
-                        <p className="text-[11px] font-mono text-white/40 mb-5 max-w-[300px] mx-auto leading-relaxed">
-                          Connect your Google account to enable per-user memory isolation and personalized recollections.
+                        <h4 className="text-[15px] font-bold text-white mb-1 tracking-wide uppercase font-sans">Sign in to LOHZ23</h4>
+                        <p className="text-[11px] font-mono text-white/45 mb-6 max-w-[340px] mx-auto leading-relaxed">
+                          Link your Google account or continue as guest to access your isolated memory vault, custom AI tools, and voice modulator.
                         </p>
-                        <button
-                          onClick={signInWithGoogle}
-                          className="inline-flex items-center justify-center gap-2 h-10 px-6 rounded-xl bg-white text-[#0a0a12] text-[11px] font-mono tracking-widest uppercase font-semibold hover:bg-white/90 transition cursor-pointer"
-                        >
-                          <LogIn size={13} />
-                          Sign in with Google
-                        </button>
-                        <button
-                          onClick={signInAsGuest}
-                          className="mt-3 inline-flex items-center justify-center gap-2 h-10 px-6 rounded-xl border border-white/15 bg-white/[0.04] text-white/80 text-[11px] font-mono tracking-widest uppercase hover:bg-white/[0.08] transition cursor-pointer"
-                        >
-                          <User size={13} />
-                          Continue as Guest
-                        </button>
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-sm mx-auto">
+                          <button
+                            onClick={signInWithGoogle}
+                            className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-2.5 h-11 px-6 rounded-xl bg-white text-[#0a0a12] text-[11px] font-mono tracking-widest uppercase font-semibold hover:bg-white/90 transition cursor-pointer shadow-lg hover:scale-102 active:scale-98"
+                          >
+                            <LogIn size={13} />
+                            Sign in with Google
+                          </button>
+                          <button
+                            onClick={signInAsGuest}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl border border-white/15 bg-white/[0.04] text-white/80 text-[11px] font-mono tracking-widest uppercase hover:bg-white/[0.08] hover:text-white transition cursor-pointer hover:scale-102 active:scale-98"
+                          >
+                            <User size={13} />
+                            Guest
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

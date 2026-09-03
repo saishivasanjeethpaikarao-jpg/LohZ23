@@ -39,6 +39,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Memory, MemoryCategory } from "./lib/memoryTypes";
 import { MemoryDashboard } from "./components/MemoryDashboard";
+import { LoginModal } from "./components/LoginModal";
 import { Tooltip } from "./components/Tooltip";
 import { AtmosphereEngine } from "./lib/atmosphere";
 import { AtmosphereController } from "./components/AtmosphereController";
@@ -98,6 +99,19 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [initialSettingsTab, setInitialSettingsTab] = useState<"providers" | "agent" | "voice" | "general" | "security" | "account">("providers");
   const [proactiveSpeechEnabled, setProactiveSpeechEnabled] = useState<boolean>(true);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+
+  // Auto-prompt login modal when user enters app without an authenticated session
+  useEffect(() => {
+    if (!user) {
+      const timer = setTimeout(() => {
+        setIsLoginModalOpen(true);
+      }, 600);
+      return () => clearTimeout(timer);
+    } else {
+      setIsLoginModalOpen(false);
+    }
+  }, [user]);
 
   // Sync state changes with refs to totally prevent stale closures in callbacks
   useEffect(() => {
@@ -969,16 +983,25 @@ export default function App() {
 
       {/* HEADER SECTION - Minimalist typography & interactive controls */}
       <header className="relative z-30 flex items-center justify-between w-full max-w-5xl mx-auto select-none">
-        <div className="flex items-center gap-2">
-          <img src="/assets/branding/lohz-mark.svg" alt="" aria-hidden="true" className="size-7" />
-          <span className="text-sm font-semibold tracking-[0.4em] text-white/50 uppercase font-sans">
-            LOHZ
-          </span>
-          <div className={`w-1.5 h-1.5 rounded-full ${
-            state === "listening" || state === "speaking" 
-              ? "bg-cyan-400" 
-              : "bg-white/10"
-          }`} />
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-black/60 border border-white/15 p-1 flex items-center justify-center shadow-md">
+            <img src="/app-logo.png" alt="LOHZ23" className="w-full h-full object-contain" />
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold tracking-[0.25em] text-white uppercase font-sans">
+                LOHZ23
+              </span>
+              <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+                state === "listening" || state === "speaking" 
+                  ? "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" 
+                  : "bg-white/20"
+              }`} />
+            </div>
+            <span className="text-[8px] font-mono tracking-[0.2em] text-white/35 -mt-0.5">
+              SINCE 2026
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap justify-end">
@@ -1149,11 +1172,18 @@ export default function App() {
           {/* User Account Button */}
           <Tooltip content={user ? `Signed in as ${user.displayName || user.email}` : "Sign in to LOHZ"} side="bottom">
             <button
-              onClick={() => { setInitialSettingsTab("account"); setIsSettingsOpen(true); }}
-              className={`flex items-center gap-1.5 transition text-xs font-mono tracking-widest cursor-pointer px-2.5 py-1 rounded-full border ${
+              onClick={() => {
+                if (user) {
+                  setInitialSettingsTab("account");
+                  setIsSettingsOpen(true);
+                } else {
+                  setIsLoginModalOpen(true);
+                }
+              }}
+              className={`flex items-center gap-1.5 transition text-xs font-mono tracking-widest cursor-pointer px-3 py-1.5 rounded-full border ${
                 user
-                  ? "bg-indigo-500/15 border-indigo-400/40 text-indigo-300"
-                  : "opacity-40 hover:opacity-100 text-white border-transparent"
+                  ? "bg-indigo-500/15 border-indigo-400/40 text-indigo-300 hover:bg-indigo-500/25"
+                  : "bg-white text-black font-semibold border-white hover:bg-white/90 shadow-[0_0_15px_rgba(255,255,255,0.2)]"
               }`}
               aria-label="Account"
             >
@@ -1486,59 +1516,63 @@ export default function App() {
             </button>
           </Tooltip>
 
-          {/* Windows Agent Status Indicator */}
-          {agentStatus && (
-            <Tooltip content={`Windows Agent: ${agentStatus.online ? 'Online' : agentStatus.connecting ? 'Connecting' : 'Offline'}`} side="left">
+          {/* Left quick control buttons cluster */}
+          <div className="absolute left-[-80px] flex items-center gap-2">
+            <Tooltip content="Open Settings" side="top">
               <button 
-                onClick={() => {
-                  setInitialSettingsTab("agent");
-                  setIsSettingsOpen(true);
-                }}
-                aria-label="Open Windows Agent settings"
-                className={`absolute left-[-60px] p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition duration-150 cursor-pointer ${
-                  agentStatus.online ? 'bg-emerald-500/20' : 
-                  agentStatus.connecting ? 'bg-amber-500/20 animate-pulse' : 
-                  'bg-crimson-500/20'
-                }`}
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white transition duration-150 cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+                aria-label="Open Settings"
               >
-                {agentStatus.online ? (
-                  <Monitor className="size-5" />
-                ) : agentStatus.connecting ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <CircleAlert className="size-5" />
-                )}
+                <SettingsIcon className="size-4" />
               </button>
             </Tooltip>
-          )}
 
-          {/* Quiet Reset Projection Anchor */}
+            {agentStatus && (
+              <Tooltip content={`Windows Agent: ${agentStatus.online ? 'Online' : agentStatus.connecting ? 'Connecting' : 'Offline'}`} side="top">
+                <button 
+                  onClick={() => {
+                    setInitialSettingsTab("agent");
+                    setIsSettingsOpen(true);
+                  }}
+                  aria-label="Open Windows Agent settings"
+                  className={`p-2.5 rounded-full border border-white/10 text-white transition duration-150 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${
+                    agentStatus.online ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 
+                    agentStatus.connecting ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse' : 
+                    'bg-white/[0.04] text-slate-400'
+                  }`}
+                >
+                  {agentStatus.online ? (
+                    <Monitor className="size-4" />
+                  ) : agentStatus.connecting ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <CircleAlert className="size-4" />
+                  )}
+                </button>
+              </Tooltip>
+            )}
+          </div>
+
+          {/* Right quick control buttons cluster */}
           {(activeProjectorUrl || errorText) && (
-            <Tooltip content="Clear Active Projections & Errors" side="right">
-              <button 
-                onClick={() => {
-                  if (activeProjectorUrl) setActiveProjectorUrl(null);
-                  setErrorText(null);
-                }}
-                className="absolute right-[-60px] p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition duration-150 cursor-pointer"
-                aria-label="Reset Broadcasts"
-              >
-                <X size={16} />
-              </button>
-            </Tooltip>
+            <div className="absolute right-[-60px]">
+              <Tooltip content="Clear Active Projections & Errors" side="top">
+                <button 
+                  onClick={() => {
+                    if (activeProjectorUrl) setActiveProjectorUrl(null);
+                    setErrorText(null);
+                  }}
+                  className="p-2.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 hover:text-white transition duration-150 cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+                  aria-label="Reset Broadcasts"
+                >
+                  <X size={15} />
+                </button>
+              </Tooltip>
+            </div>
           )}
         </div>
-
-      {/* Settings button */}
-      <Tooltip content="Open Settings" side="left">
-        <button 
-          onClick={() => setIsSettingsOpen(true)}
-          className="absolute left-[-60px] p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition duration-150 cursor-pointer"
-        >
-          <SettingsIcon className="size-5" />
-        </button>
-      </Tooltip>
-</footer>
+      </footer>
 
       {/* TextInput - Floating transparent glass message input */}
       <TextInput
@@ -1564,6 +1598,9 @@ export default function App() {
 
       {/* Settings Modal */}
       <Settings isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} agentStatus={agentStatus} initialTab={initialSettingsTab} proactiveSpeechEnabled={proactiveSpeechEnabled} onProactiveSpeechChange={setProactiveSpeechEnabled} />
+
+      {/* First-entry / Manual Login Modal */}
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} canDismiss={true} />
 
       {/* Holographic Website frame projections */}
       <AnimatePresence>
