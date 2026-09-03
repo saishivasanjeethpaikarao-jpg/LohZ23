@@ -1,0 +1,271 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LOHZ23 — Desktop Authentication</title>
+  <meta name="description" content="Sign in to your LOHZ23 Companion account.">
+  <link rel="icon" type="image/svg+xml" href="./branding/icons/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    .auth-page-container {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .auth-card {
+      background: #FFFFFF;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+      border-radius: 12px;
+      padding: 48px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      position: relative;
+    }
+    .auth-card::before {
+      content: "+";
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      font-family: var(--font-mono);
+      color: var(--accent-red);
+      font-size: 14px;
+    }
+    .auth-card::after {
+      content: "+";
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      font-family: var(--font-mono);
+      color: var(--accent-red);
+      font-size: 14px;
+    }
+    .auth-logo {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 20px;
+    }
+    .auth-title {
+      font-family: var(--font-serif);
+      font-size: 2.2rem;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .auth-subtitle {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.15em;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+    .auth-btn-google {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 20px;
+      background-color: #0D0D0F;
+      color: #FFFFFF;
+      border: 1px solid #0D0D0F;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 16px;
+    }
+    .auth-btn-google:hover {
+      background-color: var(--accent-red);
+      border-color: var(--accent-red);
+    }
+    .auth-btn-guest {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 20px;
+      background-color: transparent;
+      color: var(--text-dark);
+      border: 1px dashed rgba(0, 0, 0, 0.25);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .auth-btn-guest:hover {
+      border-color: var(--text-dark);
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+    .auth-status {
+      margin-top: 24px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      min-height: 24px;
+    }
+    .auth-status.success {
+      color: #059669;
+      font-weight: 600;
+    }
+    .auth-status.error {
+      color: #DC2626;
+      font-weight: 600;
+    }
+    .auth-note {
+      margin-top: 32px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="editorial-canvas">
+    <header class="editorial-header">
+      <div class="header-cross">+</div>
+      <a href="./index.html" class="header-brand-script">Lohz23</a>
+      <div>
+        <a href="./index.html" class="mono-label" style="text-decoration: none; color: var(--text-dark);">
+          ← RETURN TO GALLERY
+        </a>
+      </div>
+    </header>
+
+    <main class="auth-page-container">
+      <div class="auth-card">
+        <img src="./branding/logo/lohz23-symbol.svg" alt="LOHZ23 Symbol" class="auth-logo">
+        <h1 class="auth-title">DESKTOP ACCESS</h1>
+        <p class="auth-subtitle">CENTRAL AUTHENTICATION HUB</p>
+
+        <button id="btn-google-sign-in" class="auth-btn-google">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M17.64 9.2a10.37 10.37 0 0 0-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18Z" fill="#34A853"/>
+            <path d="M3.96 10.71A5.41 5.41 0 0 1 3.68 9c0-.59.1-1.17.28-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.04l3-2.33Z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.32 0 2.51.45 3.44 1.34l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58Z" fill="#EA4335"/>
+          </svg>
+          SIGN IN WITH GOOGLE
+        </button>
+
+        <button id="btn-guest-sign-in" class="auth-btn-guest">
+          CONTINUE AS GUEST (LOCAL COMPANION)
+        </button>
+
+        <div id="auth-status-msg" class="auth-status">Ready to authenticate.</div>
+
+        <p class="auth-note">
+          Once authenticated, your browser will redirect into <strong>lohz://auth/callback</strong> to load your secure memory vault directly inside LOHZ Desktop.
+        </p>
+      </div>
+    </main>
+
+    <footer class="editorial-footer">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <img src="./branding/logo/lohz23-symbol.svg" alt="LOHZ23 Symbol" width="28" height="28">
+        <span>LOHZ23 DESKTOP AUTHENTICATION HUB</span>
+      </div>
+      <div>
+        <span>AUTHENTICATED COMPANION IDENTITY</span>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCuZbO2DDSbnO_9hIIAFP0A8o0Wi2FzUhg",
+      authDomain: "studio-1742912828-cb958.firebaseapp.com",
+      projectId: "studio-1742912828-cb958",
+      storageBucket: "studio-1742912828-cb958.firebasestorage.app",
+      messagingSenderId: "698656713592",
+      appId: "1:698656713592:web:2a4d499a6f9c35e8def68d"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.addScope("profile");
+    googleProvider.addScope("email");
+
+    const statusEl = document.getElementById("auth-status-msg");
+    const googleBtn = document.getElementById("btn-google-sign-in");
+    const guestBtn = document.getElementById("btn-guest-sign-in");
+
+    // Read state or correlator from URL query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const state = urlParams.get("state") || urlParams.get("correlator") || "";
+    const redirectUri = urlParams.get("redirect_uri") || "lohz://auth/callback";
+
+    function setStatus(msg, type = "") {
+      statusEl.textContent = msg;
+      statusEl.className = "auth-status " + type;
+    }
+
+    async function handleAuthSuccess(user, isGuest = false) {
+      setStatus("Generating secure authentication token...", "success");
+      try {
+        const idToken = await user.getIdToken();
+        const callbackUrl = new URL(redirectUri);
+        callbackUrl.searchParams.set("token", idToken);
+        callbackUrl.searchParams.set("uid", user.uid);
+        if (state) callbackUrl.searchParams.set("state", state);
+        if (isGuest) callbackUrl.searchParams.set("guest", "true");
+        if (user.displayName) callbackUrl.searchParams.set("displayName", user.displayName);
+        if (user.email) callbackUrl.searchParams.set("email", user.email);
+
+        setStatus("Opening LOHZ Desktop companion via lohz:// ...", "success");
+        window.location.href = callbackUrl.toString();
+
+        setTimeout(() => {
+          setStatus("Authentication complete! You can safely return to the LOHZ Desktop application.", "success");
+        }, 2000);
+      } catch (err) {
+        setStatus("Failed to complete handoff: " + (err.message || String(err)), "error");
+      }
+    }
+
+    googleBtn.addEventListener("click", async () => {
+      googleBtn.disabled = true;
+      guestBtn.disabled = true;
+      setStatus("Opening Google Sign-In...");
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        await handleAuthSuccess(result.user, false);
+      } catch (err) {
+        setStatus("Sign-in failed: " + (err.message || String(err)), "error");
+        googleBtn.disabled = false;
+        guestBtn.disabled = false;
+      }
+    });
+
+    guestBtn.addEventListener("click", async () => {
+      googleBtn.disabled = true;
+      guestBtn.disabled = true;
+      setStatus("Starting Guest Companion Session...");
+      try {
+        const result = await signInAnonymously(auth);
+        await handleAuthSuccess(result.user, true);
+      } catch (err) {
+        setStatus("Guest session initiation failed: " + (err.message || String(err)), "error");
+        googleBtn.disabled = false;
+        guestBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
