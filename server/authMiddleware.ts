@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import * as admin from "firebase-admin";
+import { cert, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import path from "path";
 import fs from "fs";
 
@@ -31,8 +32,8 @@ export function initFirebaseAdmin(): boolean {
 
   try {
     const serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, "utf-8"));
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as any),
+    initializeApp({
+      credential: cert(serviceAccount as any),
     });
     firebaseAdminInitialized = true;
     console.log("[auth] Firebase Admin SDK initialized");
@@ -92,7 +93,7 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
   const available = initFirebaseAdmin();
   void authenticate(
     req, res, next, available,
-    async (token) => (await admin.auth().verifyIdToken(token)).uid,
+    async (token) => (await getAuth().verifyIdToken(token)).uid,
     developmentBypassEnabled()
   );
 }
@@ -117,7 +118,7 @@ export async function verifyToken(token: string): Promise<string | null> {
   }
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await getAuth().verifyIdToken(token);
     return decoded.uid;
   } catch {
     return null;

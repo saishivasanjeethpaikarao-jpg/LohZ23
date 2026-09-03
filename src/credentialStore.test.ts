@@ -31,6 +31,15 @@ describe("CredentialStore", () => {
     await expect(second.store.getCredential("gemini")).rejects.toThrow();
   });
 
+  it("isolates credentials by authenticated user", async () => {
+    const { store } = makeStore();
+    await store.setCredential("gemini", "user-a-secret", "user-a");
+    await store.setCredential("gemini", "user-b-secret", "user-b");
+    expect(await store.getCredential("gemini", "user-a")).toBe("user-a-secret");
+    expect(await store.getCredential("gemini", "user-b")).toBe("user-b-secret");
+    expect(await store.getCredential("gemini", "user-c")).toBeNull();
+  });
+
   it("rejects provider-name injection and requires an explicit admin UID", async () => {
     const { store } = makeStore();
     await expect(store.getCredential("../../PATH")).rejects.toThrow("Invalid");

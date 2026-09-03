@@ -71,7 +71,7 @@ function createInitialProviderStates(): Record<Provider, ProviderStatus> {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus, initialTab, proactiveSpeechEnabled = true, onProactiveSpeechChange }) => {
-  const { user, signInWithGoogle, signOut: authSignOut, getIdToken } = useAuth();
+  const { user, signInWithGoogle, signInAsGuest, signOut: authSignOut, getIdToken } = useAuth();
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     try {
       const token = await getIdToken();
@@ -289,10 +289,10 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="text-[14px] font-medium text-white truncate">{user.displayName || "LOHZ User"}</div>
+                            <div className="text-[14px] font-medium text-white truncate">{user.isAnonymous ? "LOHZ Guest" : (user.displayName || "LOHZ User")}</div>
                             <div className="flex items-center gap-1.5 text-[11px] font-mono text-white/40">
                               <Mail size={11} />
-                              <span className="truncate">{user.email}</span>
+                              <span className="truncate">{user.isAnonymous ? "Anonymous session" : user.email}</span>
                             </div>
                           </div>
                         </div>
@@ -309,7 +309,7 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
                         <div className="flex items-center justify-between px-5 py-4">
                           <div>
                             <div className="text-[12px] font-medium text-white">Email verified</div>
-                            <div className="text-[11px] font-mono text-white/35">Google account</div>
+                            <div className="text-[11px] font-mono text-white/35">{user.isAnonymous ? "Guest session" : "Google account"}</div>
                           </div>
                           <span className={`inline-flex items-center gap-1 text-[11px] font-mono ${user.emailVerified ? "text-emerald-300" : "text-white/40"}`}>
                             {user.emailVerified ? <><Check size={12} /> Verified</> : "Not verified"}
@@ -348,6 +348,13 @@ export const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, agentStatus
                         >
                           <LogIn size={13} />
                           Sign in with Google
+                        </button>
+                        <button
+                          onClick={signInAsGuest}
+                          className="mt-3 inline-flex items-center justify-center gap-2 h-10 px-6 rounded-xl border border-white/15 bg-white/[0.04] text-white/80 text-[11px] font-mono tracking-widest uppercase hover:bg-white/[0.08] transition cursor-pointer"
+                        >
+                          <User size={13} />
+                          Continue as Guest
                         </button>
                       </div>
                     </div>

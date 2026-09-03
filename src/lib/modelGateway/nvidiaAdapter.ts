@@ -28,7 +28,7 @@ export class NvidiaAdapter implements ModelProvider {
       throw new Error(`NVIDIA provider does not support ${request.capability}`);
     }
 
-    const apiKey = await credentialStore.getCredential("nvidia");
+    const apiKey = await credentialStore.getCredential("nvidia", request.userId);
     if (!apiKey) {
       throw new Error("NVIDIA API key not configured");
     }
@@ -87,8 +87,8 @@ export class NvidiaAdapter implements ModelProvider {
     };
   }
 
-  async healthCheck(): Promise<ProviderHealth> {
-    const apiKey = await credentialStore.getCredential("nvidia");
+  async healthCheck(userId?: string): Promise<ProviderHealth> {
+    const apiKey = await credentialStore.getCredential("nvidia", userId);
     if (!apiKey) {
       return { healthy: false, latencyMs: 0, error: "API key not configured" };
     }

@@ -4,7 +4,6 @@ import path from "path";
 import { WebSocketServer } from "ws";
 import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
 import { randomUUID } from "crypto";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { 
   loadMemories, 
@@ -860,20 +859,12 @@ async function startServer() {
   // Credential Management API Endpoints
   const PROVIDERS = ["gemini", "nvidia", "groq", "openai", "anthropic"] as const;
 
-  app.use("/api/credentials", (req, res, next) => {
-    if (!isCredentialAdmin((req as AuthenticatedRequest).userId)) {
-      res.status(403).json({ error: "Credential administrator access required" });
-      return;
-    }
-    next();
-  });
-
   // Get credential status for all providers
   app.get("/api/credentials/status", async (req, res) => {
     try {
       const status: Record<string, { configured: boolean }> = {};
       for (const provider of PROVIDERS) {
-        const hasCred = await credentialStore.hasCredential(provider);
+        const hasCred = await credentialStore.hasCredential(provider, (req as AuthenticatedRequest).userId);
         status[provider] = { configured: hasCred };
       }
       res.json(status);
@@ -889,7 +880,7 @@ async function startServer() {
       if (!PROVIDERS.includes(provider as any)) {
         return res.status(400).json({ error: "Invalid provider" });
       }
-      const hasCred = await credentialStore.hasCredential(provider);
+      const hasCred = await credentialStore.hasCredential(provider, (req as AuthenticatedRequest).userId);
       res.json({ provider, configured: hasCred });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -910,7 +901,7 @@ async function startServer() {
         return res.status(400).json({ error: "Credential value is required" });
       }
       
-      await credentialStore.setCredential(provider, value.trim());
+      await credentialStore.setCredential(provider, value.trim(), (req as AuthenticatedRequest).userId);
       res.json({ success: true, provider, message: "Credential saved successfully" });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -925,7 +916,7 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid provider" });
       }
       
-      await credentialStore.deleteCredential(provider);
+      await credentialStore.deleteCredential(provider, (req as AuthenticatedRequest).userId);
       res.json({ success: true, provider, message: "Credential removed successfully" });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -940,7 +931,7 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid provider" });
       }
       
-      const apiKey = await credentialStore.getCredential(provider);
+      const apiKey = await credentialStore.getCredential(provider, (req as AuthenticatedRequest).userId);
       if (!apiKey) {
         return res.status(400).json({ success: false, message: "No credential configured" });
       }
@@ -1467,7 +1458,7 @@ async function startServer() {
 console.log("[LOHZ] Step 2: Checking Gemini API key...");
     let geminiApiKey: string | null = null;
     try {
-      geminiApiKey = await credentialStore.getCredential("gemini");
+      geminiApiKey = await credentialStore.getCredential("gemini", wsUserId);
     } catch {
       await healthCoordinator.recordGeminiLive(wsUserId, "failure", "credential_store_unavailable");
       clientWs.send(JSON.stringify({ type: "error", error: "Voice credential store is unavailable." }));
@@ -2066,6 +2057,7 @@ console.log("[LOHZ] Step 2: Checking Gemini API key...");
 
   // Express Static assets / Vite Dev Middleware configuration
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

@@ -39,7 +39,7 @@ export class GeminiAdapter implements ModelProvider {
   }
 
   async generate(request: GenerateRequest): Promise<GenerateResult> {
-    const apiKey = await credentialStore.getCredential("gemini");
+    const apiKey = await credentialStore.getCredential("gemini", request.userId);
     if (!apiKey) {
       throw new Error("Gemini API key not configured");
     }
@@ -91,8 +91,8 @@ export class GeminiAdapter implements ModelProvider {
     };
   }
 
-  async healthCheck(): Promise<ProviderHealth> {
-    const apiKey = await credentialStore.getCredential("gemini");
+  async healthCheck(userId?: string): Promise<ProviderHealth> {
+    const apiKey = await credentialStore.getCredential("gemini", userId);
     if (!apiKey) {
       return { healthy: false, latencyMs: 0, error: "API key not configured" };
     }

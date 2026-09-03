@@ -61,7 +61,7 @@ export interface ModelProvider {
   capabilities: ModelCapability[];
 
   generate(request: GenerateRequest): Promise<GenerateResult>;
-  healthCheck(): Promise<ProviderHealth>;
+  healthCheck(userId?: string): Promise<ProviderHealth>;
 }
 
 export interface RoutingRule {

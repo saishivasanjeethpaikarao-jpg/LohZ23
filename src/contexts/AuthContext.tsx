@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   onAuthStateChanged,
   signInWithPopup,
+  signInAnonymously,
   signOut as firebaseSignOut,
   User,
 } from "firebase/auth";
@@ -11,6 +12,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
 }
@@ -19,6 +21,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   signInWithGoogle: async () => {},
+  signInAsGuest: async () => {},
   signOut: async () => {},
   getIdToken: async () => null,
 });
@@ -44,6 +47,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithPopup(auth, googleProvider);
   };
 
+  const signInAsGuest = async () => {
+    if (!auth) throw new Error("Firebase not configured");
+    await signInAnonymously(auth);
+  };
+
   const signOut = async () => {
     if (!auth) return;
     await firebaseSignOut(auth);
@@ -55,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut, getIdToken }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInAsGuest, signOut, getIdToken }}>
       {children}
     </AuthContext.Provider>
   );

@@ -217,7 +217,7 @@ export class ModelGateway {
     });
   }
 
-  async healthCheckAll(): Promise<
+  async healthCheckAll(userId?: string): Promise<
     Record<ProviderName, { healthy: boolean; latencyMs: number; error?: string }>
   > {
     const results: Record<
@@ -226,7 +226,7 @@ export class ModelGateway {
     > = {};
 
     for (const [name, provider] of this.providers) {
-      results[name] = await provider.healthCheck();
+      results[name] = await provider.healthCheck(userId);
     }
 
     return results;

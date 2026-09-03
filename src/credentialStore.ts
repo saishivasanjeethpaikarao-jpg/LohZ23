@@ -20,6 +20,12 @@ function validProvider(provider: string): boolean {
   return /^[a-z0-9-]{1,32}$/.test(provider);
 }
 
+function credentialId(provider: string, userId?: string): string {
+  if (!userId) return provider;
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(userId)) throw new Error("Invalid credential user identifier");
+  return `${userId}:${provider}`;
+}
+
 function encrypt(key: Buffer, value: string): EncryptedCredential {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
@@ -116,7 +122,7 @@ export class CredentialStore {
     return work;
   }
 
-  async setCredential(provider: string, value: string): Promise<void> {
+  async setCredential(provider: string, value: string, userId?: string): Promise<void> {
     this.assertProvider(provider);
     if (typeof value !== "string" || !value.trim() || Buffer.byteLength(value, "utf8") > 64 * 1024) {
       throw new Error("Credential value is empty or too large");
@@ -124,34 +130,37 @@ export class CredentialStore {
     await this.enqueue(async () => {
       await this.init();
       const credentials = this.readFile();
-      credentials[provider] = encrypt(this.key!, value);
+      credentials[credentialId(provider, userId)] = encrypt(this.key!, value);
       this.writeFile(credentials);
     });
   }
 
-  async getCredential(provider: string): Promise<string | null> {
+  async getCredential(provider: string, userId?: string): Promise<string | null> {
     this.assertProvider(provider);
     await this.mutations;
     await this.init();
     const credentials = this.readFile();
-    if (provider in credentials) return decrypt(this.key!, credentials[provider]);
+    const id = credentialId(provider, userId);
+    if (id in credentials) return decrypt(this.key!, credentials[id]);
+    if (userId) return null;
     const envVarName = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
     return process.env[envVarName] ?? null;
   }
 
-  async deleteCredential(provider: string): Promise<void> {
+  async deleteCredential(provider: string, userId?: string): Promise<void> {
     this.assertProvider(provider);
     await this.enqueue(async () => {
       await this.init();
       const credentials = this.readFile();
-      if (!(provider in credentials)) return;
-      delete credentials[provider];
+      const id = credentialId(provider, userId);
+      if (!(id in credentials)) return;
+      delete credentials[id];
       this.writeFile(credentials);
     });
   }
 
-  async hasCredential(provider: string): Promise<boolean> {
-    return (await this.getCredential(provider)) !== null;
+  async hasCredential(provider: string, userId?: string): Promise<boolean> {
+    return (await this.getCredential(provider, userId)) !== null;
   }
 }
 

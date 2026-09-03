@@ -20,9 +20,8 @@ win:
     - nsis
   icon: assets/branding/icon.svg
 nsis:
-  oneClick: false
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: LOHZ
@@ -37,7 +36,7 @@ linux:
   maintainer: LOHZ
 mac:
   target:
-    - dir
+    - dmg
   # macOS requires an ICNS-compatible source. Keep the build portable on
   # unsigned CI runners; supply an approved .icns via mac.icon when available.
   category: public.app-category.productivity
