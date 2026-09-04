@@ -74,6 +74,30 @@ export function extractUrl(text: string): string | undefined {
   // Bare domain like "open github.com"
   const bare = text.match(/\b((?:www\.)?[a-z0-9-]+\.(?:com|org|net|io|dev|ai|app|co|tv))\b\/?\S*/i);
   if (bare) return `https://${bare[1]}`;
+
+  // YouTube search queries: "search youtube for ...", "search for ... on youtube", "youtube search ..."
+  const ytSearch = text.match(/(?:search\s+(?:on\s+)?youtube\s+for|search\s+for\s+(.*?)\s+(?:on|in)\s+youtube|youtube\s+search\s+for?)\s*(.*)/i);
+  if (ytSearch) {
+    const query = (ytSearch[1] || ytSearch[2] || "").trim();
+    if (query) return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    return "https://www.youtube.com";
+  }
+
+  // Google search queries: "search google for ...", "search for ... on google", "google search ..."
+  const googleSearch = text.match(/(?:search\s+(?:on\s+)?google\s+for|search\s+for\s+(.*?)\s+(?:on|in)\s+google|google\s+search\s+for?)\s*(.*)/i);
+  if (googleSearch) {
+    const query = (googleSearch[1] || googleSearch[2] || "").trim();
+    if (query) return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    return "https://www.google.com";
+  }
+
+  // General search queries: "search the web for ...", "search for ...", "look up ..."
+  const generalSearch = text.match(/^(?:search(?:\s+(?:the\s+web|online))?\s+for|look\s+up)\s+(.+)/i);
+  if (generalSearch && generalSearch[1]) {
+    const query = generalSearch[1].trim();
+    if (query) return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  }
+
   // Popular website name match: e.g. "open youtube", "open youtube on chrome"
   for (const [site, siteUrl] of Object.entries(POPULAR_SITES)) {
     const re = new RegExp(`\\b${site}\\b`, "i");

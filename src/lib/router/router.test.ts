@@ -330,4 +330,34 @@ describe("voice/text parity", () => {
     expect(voice.entities.appName).toBe(typed.entities.appName);
     expect(voice.tier).toBe(typed.tier);
   });
+
+  it("natural language app variants map to canonical app names", () => {
+    expect(classify("open vs code").entities.appName).toBe("code");
+    expect(classify("launch visual studio code").entities.appName).toBe("code");
+    expect(classify("fire up google chrome").entities.appName).toBe("chrome");
+  });
+
+  it("handles conversational natural language website and search requests", () => {
+    const ytSearch = classify("search youtube for synthwave chill");
+    expect(ytSearch.intent).toBe("open_url");
+    expect(ytSearch.entities.url).toContain("youtube.com/results?search_query=synthwave");
+
+    const googleSearch = classify("search google for weather in hyderabad");
+    expect(googleSearch.intent).toBe("open_url");
+    expect(googleSearch.entities.url).toContain("google.com/search?q=weather");
+
+    const ytOnChrome = classify("open youtube on chrome");
+    expect(ytOnChrome.intent).toBe("open_url");
+    expect(ytOnChrome.entities.url).toBe("https://www.youtube.com");
+    expect(ytOnChrome.entities.appName).toBe("chrome");
+  });
+
+  it("chat intent produces a companion response instead of null", async () => {
+    const { exec } = okExec();
+    const router = new CognitiveRouter({ executeTool: exec });
+    const out = await router.route("userA", "hello there lohz");
+    expect(out.intent).toBe("chat");
+    expect(typeof out.response).toBe("string");
+    expect(out.response).toBeTruthy();
+  });
 });

@@ -140,11 +140,15 @@ export class CredentialStore {
     await this.mutations;
     await this.init();
     const credentials = this.readFile();
-    const id = credentialId(provider, userId);
-    if (id in credentials) return decrypt(this.key!, credentials[id]);
-    if (userId) return null;
+    if (userId) {
+      const userSpecificId = credentialId(provider, userId);
+      if (userSpecificId in credentials) return decrypt(this.key!, credentials[userSpecificId]);
+    }
+    // Fallback 1: global credential without userId
+    if (provider in credentials) return decrypt(this.key!, credentials[provider]);
+    // Fallback 2: environment variables (e.g. GEMINI_API_KEY, VITE_GEMINI_API_KEY)
     const envVarName = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-    return process.env[envVarName] ?? null;
+    return process.env[envVarName] ?? process.env[`VITE_${envVarName}`] ?? null;
   }
 
   async deleteCredential(provider: string, userId?: string): Promise<void> {

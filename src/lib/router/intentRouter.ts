@@ -29,21 +29,21 @@ interface Rule {
 
 const RULES: Rule[] = [
   // volume (before generic app rules; "set volume" isn't an app)
-  { intent: "volume_set", pattern: /^(?:set|change|turn)\s+(?:the\s+)?volume\s+(?:to|up(?:\s+to)?|down(?:\s+to)?)/i, confidence: CONFIDENCE.exactCommand },
+  { intent: "volume_set", pattern: /^(?:set|change|turn|put)\s+(?:the\s+)?volume\s+(?:to|up(?:\s+to)?|down(?:\s+to)?)|^(?:mute|unmute)(?:\s+(?:the\s+)?volume)?/i, confidence: CONFIDENCE.exactCommand },
   { intent: "volume_get", pattern: /^(?:what(?:'s| is)\s+the\s+)?volume\b/i, confidence: CONFIDENCE.clearPattern },
   // screenshot
-  { intent: "screenshot", pattern: /^take\s+(?:a\s+)?screenshot|^screenshot$/i, confidence: CONFIDENCE.exactCommand },
+  { intent: "screenshot", pattern: /^(?:take\s+(?:a\s+)?screenshot|screenshot|capture\s+(?:the\s+)?screen|screen\s*capture)$/i, confidence: CONFIDENCE.exactCommand },
   // clipboard (write must preface read — 'copy "x" to clipboard' vs bare 'copy')
   { intent: "clipboard_write", pattern: /^(?:copy|write|save)\b.*\bto\s+(?:the\s+)?clipboard\b/i, confidence: CONFIDENCE.exactCommand },
   { intent: "clipboard_read", pattern: /^(?:read|what(?:'s| is)\s+in)\s+(?:the\s+)?clipboard|^copy\s*(?:this)?$|^paste$/i, confidence: CONFIDENCE.exactCommand },
   // system info
-  { intent: "system_info", pattern: /^(?:system\s*info|system information|show system info)$/i, confidence: CONFIDENCE.exactCommand },
+  { intent: "system_info", pattern: /^(?:system\s*info|system information|show system info|pc\s*specs)$/i, confidence: CONFIDENCE.exactCommand },
   // URL before open_app when a URL/domain is present
-  { intent: "open_url", pattern: /^(?:open|go\s+to|visit|browse)\b/i, confidence: CONFIDENCE.clearPattern },
+  { intent: "open_url", pattern: /^(?:open(?:\s+up)?|go\s+to|visit|browse|navigate\s+to|search\s+for|search)\b/i, confidence: CONFIDENCE.clearPattern },
   // apps
-  { intent: "open_app", pattern: /^(?:open|start|launch)\s+\S+/i, confidence: CONFIDENCE.exactCommand },
-  { intent: "close_app", pattern: /^(?:close|kill|quit)\s+\S+/i, confidence: CONFIDENCE.exactCommand },
-  { intent: "focus_app", pattern: /^focus\s+\S+|^switch\s+to\s+\S+/i, confidence: CONFIDENCE.exactCommand },
+  { intent: "open_app", pattern: /^(?:open(?:\s+up)?|start(?:\s+up)?|launch|run|fire\s+up|bring\s+up)\s+\S+/i, confidence: CONFIDENCE.exactCommand },
+  { intent: "close_app", pattern: /^(?:close(?:\s+down)?|kill|quit|exit|shut\s+down|terminate)\s+\S+/i, confidence: CONFIDENCE.exactCommand },
+  { intent: "focus_app", pattern: /^(?:focus(?:\s+on)?|switch\s+to|bring\s+to\s+front)\s+\S+/i, confidence: CONFIDENCE.exactCommand },
   // memory / context queries
   { intent: "memory_query", pattern: /\b(what\s+do\s+you\s+(?:remember|know)\s+about|do\s+you\s+remember|recall)\b/i, confidence: CONFIDENCE.clearPattern },
   { intent: "context_query", pattern: /\b(what\s+(?:was|am|were)\s+i\s+(?:working|doing)|current\s+project|where\s+were\s+we|what.*yesterday|status\s+of\s+.*)\b/i, confidence: CONFIDENCE.clearPattern },

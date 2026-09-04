@@ -135,7 +135,7 @@ function toolArgsFor(intent: string, e: RouteEntities): Record<string, unknown> 
     case "open_app": return { name: e.appName };
     case "close_app": return { name: e.appName };
     case "focus_app": return { name: e.appName };
-    case "open_url": return { url: e.url };
+    case "open_url": return { url: e.url, appName: e.appName };
     case "volume_set": return { level: e.volumeLevel };
     case "clipboard_write": return { content: e.text };
     default: return {};
@@ -351,11 +351,16 @@ export class CognitiveRouter {
       response = mems.length
         ? `From memory: ${mems.map((m) => m.text).join(" | ")}`
         : "I do not have a relevant memory for that yet.";
-    } else if (canReadPrivateContext && (c.intent === "context_query" || c.intent === "chat") && this.deps.providers?.currentContextSnapshot) {
+    } else if (canReadPrivateContext && c.intent === "context_query" && this.deps.providers?.currentContextSnapshot) {
       const snap = await this.deps.providers.currentContextSnapshot(userId);
       response = snap
         ? `Current context: ${JSON.stringify(snap).slice(0, 400)}`
         : "No active context recorded yet.";
+    } else if (c.intent === "chat") {
+      if (this.deps.gateway) {
+        return this.runReasoning(requestId, userId, input, c, lifecycle, started, opts);
+      }
+      response = "I am LOHZ, your proactive AI assistant and Windows copilot. How can I help you today?";
     }
 
     lifecycle.push(response ? "EXECUTED" : "ASK", "COMPLETED");
@@ -382,7 +387,7 @@ export class CognitiveRouter {
       }, started);
     }
     try {
-      const prompt = opts.situationPrompt ?? input;
+      const prompt = opts.situationPrompt ?? (c.intent === "chat" ? `You are LOHZ, an intelligent, helpful, and proactive desktop AI companion and Windows copilot. Respond concisely, naturally, and warmly to the user.\n\nUser: ${input}` : input);
       const res = await this.deps.gateway.generate({
         prompt: String(prompt).slice(0, 8000),
         capability: "reasoning",
@@ -396,8 +401,11 @@ export class CognitiveRouter {
       }, started);
     } catch {
       lifecycle.push("ASK", "COMPLETED");
-      return this.finish(requestId, userId, c, false, lifecycle, {
-        response: "Reasoning failed â€” please retry later.",
+      const fallbackMsg = c.intent === "chat"
+        ? "I'm here with you, but I had trouble reaching my reasoning engine. How can I assist you directly?"
+        : "Reasoning failed — please retry later.";
+      return this.finish(requestId, userId, c, c.intent === "chat", lifecycle, {
+        response: fallbackMsg,
         errorKind: "model_failed",
       }, started);
     }

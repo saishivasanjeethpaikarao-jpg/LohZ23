@@ -11,15 +11,15 @@ const WAKE_PREFIXES = [
 ];
 
 const POLITENESS = [
-  /^can\s+you\s+(?:please\s+)?/i,
-  /^could\s+you\s+(?:please\s+)?/i,
-  /^would\s+you\s+(?:please\s+)?/i,
-  /^please\s+/i,
-  /\s+please\s*[.!?]*$/i,
+  /^(?:can|could|would|will)\s+(?:you|we)\s+(?:please\s+)?(?:kindly\s+)?/i,
+  /^(?:please|kindly)\s+/i,
+  /^(?:i\s+want\s+you\s+to|i\s+need\s+you\s+to|help\s+me|let's|lets|go\s+ahead\s+and)\s+/i,
+  /\s+(?:please|kindly)\s*[.!?]*$/i,
   /\s+for\s+me\s*[.!?]*$/i,
+  /\s+(?:right\s+)?now\s*[.!?]*$/i,
 ];
 
-const LEADING_FILLERS = [/^(?:um+|uh+|so)[.,!\s]+/i];
+const LEADING_FILLERS = [/^(?:um+|uh+|so|hey|okay|ok|well|just)[.,!\s]+/i];
 
 export function normalizeInput(raw: string): string {
   let t = raw.trim();

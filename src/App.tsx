@@ -877,6 +877,14 @@ export default function App() {
       setUserCaption("");
       setActiveEmotion(detectEmotionFromText(reply));
 
+      // Connect holographic browser projection to openUrl results
+      if (result.toolUsed === "openUrl" || result.intent === "open_url") {
+        const targetUrl = (result.result as any)?.data?.url || (result.result as any)?.url;
+        if (targetUrl && typeof targetUrl === "string") {
+          setActiveProjectorUrl(targetUrl);
+        }
+      }
+
       // Speak assistant voice reply with companion lip sync
       speechService.speak(reply, {
         onStart: () => setCharacterState("speaking"),

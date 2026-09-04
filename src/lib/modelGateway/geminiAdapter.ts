@@ -44,7 +44,11 @@ export class GeminiAdapter implements ModelProvider {
       throw new Error("Gemini API key not configured");
     }
 
-    const model = this.modelMap[request.capability] || "gemini-3.5-flash";
+    const defaultModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    let model = this.modelMap[request.capability] || defaultModel;
+    if (model === "gemini-3.5-flash") {
+      model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    }
     const client = this.getClient(apiKey);
     const start = Date.now();
 
@@ -64,11 +68,27 @@ export class GeminiAdapter implements ModelProvider {
       config.systemInstruction = request.systemInstruction;
     }
 
-    const response = await client.models.generateContent({
-      model,
-      contents: request.prompt,
-      config,
-    });
+    let response: any;
+    try {
+      response = await client.models.generateContent({
+        model,
+        contents: request.prompt,
+        config,
+      });
+    } catch (err) {
+      // Fallback model trial if specific version failed
+      const fallbackModel = model.includes("2.5") ? "gemini-2.0-flash" : "gemini-1.5-flash";
+      try {
+        response = await client.models.generateContent({
+          model: fallbackModel,
+          contents: request.prompt,
+          config,
+        });
+        model = fallbackModel;
+      } catch {
+        throw err;
+      }
+    }
 
     const latencyMs = Date.now() - start;
     const text = response.text?.trim() || "";

@@ -41,9 +41,18 @@ export async function openUrl(params: Record<string, any>) {
   }
 
   const url = parsed.toString();
+  const appNameLower = params.appName ? String(params.appName).toLowerCase() : "";
+  let targetBrowser = "";
+  if (appNameLower.includes("chrome")) targetBrowser = "chrome";
+  else if (appNameLower.includes("edge")) targetBrowser = "msedge";
+  else if (appNameLower.includes("firefox")) targetBrowser = "firefox";
+
   try {
     if (process.platform === "win32") {
-      const child = spawn("cmd.exe", ["/c", "start", "", url], {
+      const args = targetBrowser
+        ? ["/c", "start", targetBrowser, url]
+        : ["/c", "start", "", url];
+      const child = spawn("cmd.exe", args, {
         detached: true,
         stdio: "ignore",
         windowsHide: true,
@@ -60,7 +69,7 @@ export async function openUrl(params: Record<string, any>) {
     throw e;
   }
   return {
-    message: `Opened ${url} in the default browser.`,
-    data: { url },
+    message: `Opened ${url}${targetBrowser ? ` in ${targetBrowser}` : " in your browser"}.`,
+    data: { url, appName: params.appName },
   };
 }

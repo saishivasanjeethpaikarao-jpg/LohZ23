@@ -95,7 +95,7 @@ export class CostLimitExceededError extends Error {
 export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   routing: {
     text_generation: { primary: "gemini", fallback: "nvidia" },
-    reasoning: { primary: "nvidia", fallback: "gemini" },
+    reasoning: { primary: "gemini", fallback: "nvidia" },
     memory_consolidation: { primary: "gemini", fallback: "nvidia" },
     reflection: { primary: "gemini", fallback: "nvidia" },
     planning: { primary: "gemini", fallback: "nvidia" },
@@ -104,5 +104,5 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   maxRetries: 1,
   enforceCostLimit: false,
   maxCostLogEntries: 1000,
-  requestTimeoutMs: 30_000,
+  requestTimeoutMs: 8_000,
 };
