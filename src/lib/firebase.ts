@@ -2,12 +2,12 @@ import { initializeApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth, GoogleAuthProvider, indexedDBLocalPersistence, setPersistence } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCuZbO2DDSbnO_9hIIAFP0A8o0Wi2FzUhg",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "studio-1742912828-cb958.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "studio-1742912828-cb958",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "studio-1742912828-cb958.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "698656713592",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:698656713592:web:2a4d499a6f9c35e8def68d",
 };
 
 const hasFirebaseConfig = Boolean(firebaseConfig.apiKey);

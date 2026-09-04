@@ -104,7 +104,20 @@ async function start(): Promise<void> {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   await waitForBackend(backend);
-  await mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  
+  // Load local backend with retry mechanism
+  let loaded = false;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await mainWindow.loadURL(`http://127.0.0.1:${port}`);
+      loaded = true;
+      break;
+    } catch (err) {
+      if (attempt === 5) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+  }
+
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 }
 

@@ -110,49 +110,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Web: uses signInWithPopup (standard Firebase approach).
    */
   const signInWithGoogle = async () => {
-    if (!auth) throw new Error("Firebase not configured");
-
     if (isDesktop && window.lohzDesktop?.openAuth) {
-      // Desktop: system-browser auth flow (no popup inside Electron)
+      // Desktop: system-browser auth flow (opens Netlify Auth Hub / browser)
       const result = await window.lohzDesktop.openAuth();
       if (!result.ok) {
         throw new Error(result.error || "Desktop authentication failed");
       }
-      // The uid was verified server-side; we need to sign the renderer in.
-      // The backend /api/auth/guest-session can issue a custom token for this uid,
-      // OR the user signed in on the browser page and the Firebase SDK has their
-      // token available via the auth state change listener (IndexedDB persistence).
-      // Either way: the onAuthStateChanged listener will fire and update state.
-      // No further action needed here — just wait for the listener.
-    } else {
-      // Web: standard popup flow
-      await signInWithPopup(auth, googleProvider);
+      // Browser redirected to lohz://auth/callback which handles sign in via onAuthProtocolCallback
+      return;
     }
+
+    if (!auth) throw new Error("Firebase not configured");
+    // Web: standard popup flow
+    await signInWithPopup(auth, googleProvider);
   };
 
   /**
    * Sign in as guest (anonymous session).
-   * Desktop: uses the server-issued custom token to create a proper Firebase
-   * anonymous user that can be upgraded later.
+   * Desktop: uses the server-issued custom token or anonymous session.
    * Web: uses signInAnonymously directly.
    */
   const signInAsGuest = async () => {
-    if (!auth) throw new Error("Firebase not configured");
-
     if (isDesktop) {
       // Desktop: request a guest custom token from the backend
       try {
         const res = await fetch("/api/auth/guest-session", { method: "POST" });
         const data = await res.json();
-        if (!data.ok || !data.customToken) throw new Error(data.error || "Guest session failed");
-        await signInWithCustomToken(auth, data.customToken);
-      } catch {
-        // Fallback: direct anonymous sign-in (works when Firebase Admin not configured)
-        await signInAnonymously(auth);
+        if (data.ok && data.customToken && auth) {
+          await signInWithCustomToken(auth, data.customToken);
+          return;
+        }
+      } catch (e) {
+        console.warn("[Auth] Backend guest-session error:", e);
       }
-    } else {
-      await signInAnonymously(auth);
+
+      if (auth) {
+        await signInAnonymously(auth);
+        return;
+      }
+
+      // If Firebase SDK is completely disabled, treat as local guest companion
+      setUser({
+        uid: "guest-local-session",
+        isAnonymous: true,
+        displayName: "Guest User",
+        email: null,
+        photoURL: null,
+      } as any);
+      return;
     }
+
+    if (!auth) throw new Error("Firebase not configured");
+    await signInAnonymously(auth);
   };
 
   /**
