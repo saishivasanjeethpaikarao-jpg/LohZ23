@@ -8,8 +8,14 @@
 import type { RouteEntities } from "./types";
 
 export const KNOWN_APPS = [
-  "chrome", "edge", "firefox", "calculator", "notepad", "explorer",
-  "spotify", "code", "vscode", "terminal", "powershell", "cmd",
+  "visual studio code", "vs code", "vscode", "code",
+  "google chrome", "chrome",
+  "microsoft edge", "edge",
+  "mozilla firefox", "firefox",
+  "file explorer", "explorer",
+  "calculator", "calc",
+  "notepad", "spotify",
+  "terminal", "powershell", "cmd", "command prompt",
   "outlook", "teams", "slack", "discord", "word", "excel", "powerpoint",
 ];
 
@@ -22,20 +28,43 @@ const WORD_NUMBERS: Record<string, number> = {
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/i;
 
-function extractAppName(text: string): string | undefined {
+export const POPULAR_SITES: Record<string, string> = {
+  youtube: "https://www.youtube.com",
+  google: "https://www.google.com",
+  github: "https://github.com",
+  twitter: "https://x.com",
+  x: "https://x.com",
+  reddit: "https://www.reddit.com",
+  netflix: "https://www.netflix.com",
+  chatgpt: "https://chatgpt.com",
+  gmail: "https://mail.google.com",
+  facebook: "https://www.facebook.com",
+  instagram: "https://www.instagram.com",
+  linkedin: "https://www.linkedin.com",
+  amazon: "https://www.amazon.com",
+  wikipedia: "https://www.wikipedia.org",
+  spotify: "https://open.spotify.com",
+};
+
+export function extractAppName(text: string): string | undefined {
   for (const app of KNOWN_APPS) {
-    const re = new RegExp(`\\b${app}\\b`, "i");
+    const re = new RegExp(`\\b${app.replace(/\s+/g, "\\s+")}\\b`, "i");
     if (re.test(text)) return canonicalAppName(app);
   }
   // Conservative fallback: a capitalized token right after open/close/focus/start/launch.
   const m = text.match(/\b(?:open|close|focus|start|launch|kill|quit)\s+([A-Z][\w-]*)\b/);
-  return m?.[1] ? m[1].toLowerCase() : undefined;
+  return m?.[1] ? canonicalAppName(m[1]) : undefined;
 }
 
 /** Map common aliases to registry tool args (openApp uses lowercase names). */
 export function canonicalAppName(app: string): string {
-  const lower = app.toLowerCase();
-  if (lower === "vscode") return "code";
+  const lower = app.trim().toLowerCase();
+  if (lower === "vscode" || lower === "vs code" || lower === "visual studio code" || lower === "vs") return "code";
+  if (lower === "google chrome") return "chrome";
+  if (lower === "microsoft edge") return "edge";
+  if (lower === "file explorer") return "explorer";
+  if (lower === "calc") return "calculator";
+  if (lower === "command prompt") return "cmd";
   return lower;
 }
 
@@ -43,8 +72,13 @@ export function extractUrl(text: string): string | undefined {
   const m = text.match(URL_PATTERN);
   if (m) return m[0];
   // Bare domain like "open github.com"
-  const bare = text.match(/\b((?:www\.)?[a-z0-9-]+\.(?:com|org|net|io|dev|ai))\b\/?\S*/i);
+  const bare = text.match(/\b((?:www\.)?[a-z0-9-]+\.(?:com|org|net|io|dev|ai|app|co|tv))\b\/?\S*/i);
   if (bare) return `https://${bare[1]}`;
+  // Popular website name match: e.g. "open youtube", "open youtube on chrome"
+  for (const [site, siteUrl] of Object.entries(POPULAR_SITES)) {
+    const re = new RegExp(`\\b${site}\\b`, "i");
+    if (re.test(text)) return siteUrl;
+  }
   return undefined;
 }
 

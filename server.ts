@@ -17,6 +17,7 @@ import { getPlatformCapabilities } from "./src/lib/platform/capabilities";
 import { getTool } from "./windows-agent/toolRegistry";
 import { credentialStore } from "./src/credentialStore";
 import { authMiddleware, verifyToken, initFirebaseAdmin, AuthenticatedRequest } from "./server/authMiddleware";
+import { registerDesktopAuthRoutes } from "./server/authDesktop";
 import { getProductionGateway } from "./src/lib/modelGateway/productionGateway";
 import {
   createProductionFirestoreLike,
@@ -173,6 +174,16 @@ async function startServer() {
   registerUserModelRoutes(app);
   registerWorldModelRoutes(app);
   registerCuriosityRoutes(app);
+
+  // Desktop authentication routes (code exchange, callback polling, guest session)
+  registerDesktopAuthRoutes(app, {
+    apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyCuZbO2DDSbnO_9hIIAFP0A8o0Wi2FzUhg",
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "studio-1742912828-cb958.firebaseapp.com",
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "studio-1742912828-cb958",
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "studio-1742912828-cb958.firebasestorage.app",
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "698656713592",
+    appId: process.env.VITE_FIREBASE_APP_ID || "1:698656713592:web:2a4d499a6f9c35e8def68d",
+  });
 
   // Phase 27 — fast intent router. Works offline (Tier 0/1) even without
   // Firestore or a connected agent; gateway failures degrade gracefully.

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Phase 27 - CognitiveRouter: cheapest-safe-path execution across tiers.
  * Tier 0: deterministic tools (0 model calls). Tier 1: memory/context.
  * Tier 2: ModelGateway reasoning. Tier 3: autonomous SEAM (no fake exec).
@@ -323,9 +323,12 @@ export class CognitiveRouter {
       }
     }
 
+    const toolMsg = (exec.result as any)?.message;
+    const friendlyResponse = typeof toolMsg === "string" && toolMsg.trim() ? toolMsg : `Done (${toolName}).`;
+
     return this.finish(requestId, userId, c, true, lifecycle, {
       toolUsed: toolName,
-      response: `Done (${toolName}).`,
+      response: friendlyResponse,
       resultPayload: exec.result,
       verificationStatus: exec.verificationStatus ?? "UNVERIFIED",
     }, started);

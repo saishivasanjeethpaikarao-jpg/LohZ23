@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { LogIn, User, Sparkles, Shield, X, ArrowRight, CheckCircle2, Lock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -18,6 +18,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [loadingAction, setLoadingAction] = useState<"google" | "guest" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Automatically dismiss modal once authentication succeeds
+  React.useEffect(() => {
+    if (user && isOpen && onClose) {
+      onClose();
+    }
+  }, [user, isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleGoogleSignIn = async () => {
@@ -25,10 +32,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setErrorMessage(null);
     try {
       await signInWithGoogle();
-      if (onClose) onClose();
+      // On web, signInWithPopup completes synchronously.
+      // On desktop, it opens the browser; the modal will auto-dismiss when user is updated.
     } catch (err: any) {
       setErrorMessage(err?.message || "Google sign-in could not be completed.");
-    } finally {
       setLoadingAction(null);
     }
   };

@@ -15,6 +15,7 @@ import {
 import { matchable, normalizeInput } from "./normalize";
 import {
   canonicalAppName,
+  extractAppName,
   extractEntities,
   extractQuotedText,
 } from "./entities";
@@ -80,15 +81,17 @@ export function classify(rawInput: string): RoutingResult {
   const entities: RouteEntities = extractEntities(text);
 
   // URL refinement for open_url vs open_app
-  if (best?.intent === "open_url") {
-    if (!entities.url) {
-      // "open github.com" handled by entity extractor; bare word → treat as app/url ambiguity
-      const bare = text.replace(/^(?:open|go to|visit|browse)\s+/i, "").trim();
+  if (best?.intent === "open_url" || best?.intent === "open_app") {
+    if (entities.url) {
+      best.intent = "open_url";
+    } else {
+      const bare = text.replace(/^(?:open|start|launch|go to|visit|browse)\s+/i, "").trim();
       if (/^[a-z0-9-]+\.[a-z]{2,}$/i.test(bare)) {
         entities.url = `https://${bare}`;
+        best.intent = "open_url";
       } else if (bare && !UNRESOLVED_REFERENT.test(bare)) {
-        best.intent = "open_app"; // no domain present → it's an app command
-        entities.appName = canonicalAppName(bare.split(/\s+/)[0]);
+        best.intent = "open_app";
+        entities.appName = extractAppName(text) || extractAppName(bare) || canonicalAppName(bare);
       } else if (bare && UNRESOLVED_REFERENT.test(bare)) {
         // Pronoun referent ("open it") — must NOT guess an application (§7).
         best.intent = "open_app";

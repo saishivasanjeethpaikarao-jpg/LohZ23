@@ -51,56 +51,183 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    // Phase 49: Instant session restoration from localStorage for desktop & web
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("lohz_authenticated_user");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.uid) {
+            return {
+              uid: parsed.uid,
+              email: parsed.email || null,
+              displayName: parsed.displayName || (parsed.email ? parsed.email.split("@")[0] : "LOHZ User"),
+              photoURL: parsed.photoURL || null,
+              isAnonymous: !!parsed.isAnonymous,
+              emailVerified: true,
+              phoneNumber: null,
+              tenantId: null,
+              providerId: "google.com",
+              metadata: {} as any,
+              providerData: [],
+              refreshToken: "",
+              delete: async () => {},
+              getIdToken: async () => parsed.token || "",
+              getIdTokenResult: async () => ({
+                token: parsed.token || "",
+                claims: {},
+                authTime: new Date().toISOString(),
+                issuedAtTime: new Date().toISOString(),
+                expirationTime: new Date(Date.now() + 3600_000).toISOString(),
+                signInProvider: parsed.isAnonymous ? "anonymous" : "google.com",
+              } as any),
+              reload: async () => {},
+              toJSON: () => parsed,
+            } as unknown as User;
+          }
+        }
+      } catch (err) {
+        console.warn("[Auth] Failed to restore cached session:", err);
+      }
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState(!user);
+
+  // Helper to apply authenticated payload from either lohz:// protocol or localhost loopback
+  const applyAuthenticatedPayload = async (payload: {
+    token?: string;
+    uid?: string;
+    guest?: boolean;
+    displayName?: string;
+    email?: string;
+    photoURL?: string;
+  }) => {
+    if (!payload.token && !payload.uid) return;
+
+    // Try custom token sign-in first if Firebase is configured
+    if (auth && payload.token) {
+      try {
+        await signInWithCustomToken(auth, payload.token);
+        return; // onAuthStateChanged will fire and set the user
+      } catch {
+        // Token was a Firebase ID token or standalone JWT — fallback to session synthesis
+      }
+    }
+
+    const synthesizedUser: User = {
+      uid: payload.uid || (payload.guest ? `guest_${Date.now()}` : "google-user"),
+      email: payload.email || null,
+      displayName: payload.displayName || (payload.guest ? "Guest User" : (payload.email ? payload.email.split("@")[0] : "LOHZ User")),
+      photoURL: payload.photoURL || null,
+      isAnonymous: !!payload.guest,
+      emailVerified: true,
+      phoneNumber: null,
+      tenantId: null,
+      providerId: payload.guest ? "anonymous" : "google.com",
+      metadata: {} as any,
+      providerData: [],
+      refreshToken: "",
+      delete: async () => {},
+      getIdToken: async () => payload.token || "",
+      getIdTokenResult: async () => ({
+        token: payload.token || "",
+        claims: {},
+        authTime: new Date().toISOString(),
+        issuedAtTime: new Date().toISOString(),
+        expirationTime: new Date(Date.now() + 3600_000).toISOString(),
+        signInProvider: payload.guest ? "anonymous" : "google.com",
+      } as any),
+      reload: async () => {},
+      toJSON: () => ({ uid: payload.uid, email: payload.email, displayName: payload.displayName }),
+    } as unknown as User;
+
+    setUser(synthesizedUser);
+    localStorage.setItem("lohz_authenticated_user", JSON.stringify({
+      uid: synthesizedUser.uid,
+      email: synthesizedUser.email,
+      displayName: synthesizedUser.displayName,
+      photoURL: synthesizedUser.photoURL,
+      token: payload.token || "",
+      isAnonymous: synthesizedUser.isAnonymous,
+    }));
+    setLoading(false);
+  };
 
   useEffect(() => {
-    if (!auth) {
-      setLoading(false);
-      return;
-    }
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Check if this is a transition from an anonymous guest user to a permanent user
-      const prevGuestUid = localStorage.getItem("lohz_guest_session_uid");
-      if (firebaseUser && !firebaseUser.isAnonymous && prevGuestUid && prevGuestUid !== firebaseUser.uid) {
-        try {
-          const token = await firebaseUser.getIdToken();
-          await fetch("/api/auth/migrate-guest", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ guestUid: prevGuestUid }),
-          });
-          localStorage.removeItem("lohz_guest_session_uid");
-        } catch (err) {
-          console.warn("[Auth] Background guest data migration error:", err);
+    let unsubscribe = () => {};
+
+    if (auth) {
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          const prevGuestUid = localStorage.getItem("lohz_guest_session_uid");
+          if (!firebaseUser.isAnonymous && prevGuestUid && prevGuestUid !== firebaseUser.uid) {
+            try {
+              const token = await firebaseUser.getIdToken();
+              await fetch("/api/auth/migrate-guest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ guestUid: prevGuestUid }),
+              });
+              localStorage.removeItem("lohz_guest_session_uid");
+            } catch (err) {
+              console.warn("[Auth] Background guest data migration error:", err);
+            }
+          } else if (firebaseUser.isAnonymous) {
+            localStorage.setItem("lohz_guest_session_uid", firebaseUser.uid);
+          }
+
+          setUser(firebaseUser);
+          try {
+            const idTok = await firebaseUser.getIdToken();
+            localStorage.setItem("lohz_authenticated_user", JSON.stringify({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              token: idTok,
+              isAnonymous: firebaseUser.isAnonymous,
+            }));
+          } catch {}
         }
-      } else if (firebaseUser?.isAnonymous) {
-        localStorage.setItem("lohz_guest_session_uid", firebaseUser.uid);
-      }
-
-      setUser(firebaseUser);
+        setLoading(false);
+      });
+    } else {
       setLoading(false);
-    });
+    }
 
-    // Listen for lohz://auth/callback handoffs from desktop main process
+    // 1. Listen for lohz://auth/callback deep-link handoffs from desktop main process
     let unlistenProtocol: (() => void) | undefined;
     if (isDesktop && window.lohzDesktop?.onAuthProtocolCallback) {
       unlistenProtocol = window.lohzDesktop.onAuthProtocolCallback(async (payload) => {
-        if (!auth) return;
-        if (payload.token) {
-          try {
-            // Sign in with the custom token or credentials received
-            await signInWithCustomToken(auth, payload.token);
-          } catch {
-            // Direct ID token or already logged in
-          }
-        }
+        await applyAuthenticatedPayload(payload);
       });
+    }
+
+    // 2. Local loopback polling fallback: check if web browser sent credentials to local backend
+    let loopbackInterval: NodeJS.Timeout | undefined;
+    if (isDesktop) {
+      loopbackInterval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/auth/desktop-session");
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.ok && data.session && (data.session.uid || data.session.token)) {
+            await applyAuthenticatedPayload(data.session);
+            await fetch("/api/auth/clear-desktop-session", { method: "POST" });
+          }
+        } catch {
+          // Local server offline or busy
+        }
+      }, 1500);
     }
 
     return () => {
       unsubscribe();
       unlistenProtocol?.();
+      if (loopbackInterval) clearInterval(loopbackInterval);
     };
   }, []);
 
@@ -176,9 +303,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    if (!auth) return;
-    await firebaseSignOut(auth);
-    // Client state cleared by callers (App.tsx resets memories/transcripts etc.)
+    localStorage.removeItem("lohz_authenticated_user");
+    localStorage.removeItem("lohz_guest_session_uid");
+    setUser(null);
+    if (auth) {
+      try {
+        await firebaseSignOut(auth);
+      } catch (err) {
+        console.warn("[Auth] Firebase signout error:", err);
+      }
+    }
+    if (isDesktop) {
+      try {
+        await fetch("/api/auth/clear-desktop-session", { method: "POST" });
+      } catch {}
+    }
   };
 
   const getIdToken = async (): Promise<string | null> => {

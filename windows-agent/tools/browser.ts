@@ -42,12 +42,18 @@ export async function openUrl(params: Record<string, any>) {
 
   const url = parsed.toString();
   try {
-    const child = spawn("rundll32", ["url.dll,FileProtocolHandler", url], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.unref();
+    if (process.platform === "win32") {
+      const child = spawn("cmd.exe", ["/c", "start", "", url], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.unref();
+    } else {
+      const opener = process.platform === "darwin" ? "open" : "xdg-open";
+      const child = spawn(opener, [url], { detached: true, stdio: "ignore" });
+      child.unref();
+    }
   } catch (err: any) {
     const e = new Error(`Could not open URL: ${err.message}`);
     (e as any).code = "URL_OPEN_FAILED";

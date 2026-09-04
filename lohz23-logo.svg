@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 700" width="600" height="700" fill="none">
+  <!-- LOHZ23 Full Brand Logo & Emblem (Matching Image 1) -->
+  <rect width="600" height="700" fill="#050505" />
+
+  <g transform="translate(44, 40)">
+    <!-- 3D Cube Symbol -->
+    <g fill="#FFFFFF">
+      <!-- Top Face -->
+      <path d="M 256 70 C 270 70 282 76 390 138 C 410 150 410 166 390 178 L 276 244 C 264 250 248 250 236 244 L 122 178 C 102 166 102 150 122 138 L 230 76 C 242 70 254 70 256 70 Z" />
+      <!-- Left Face -->
+      <path d="M 100 196 C 100 184 112 178 124 185 L 238 250 C 248 256 248 268 248 280 L 248 412 C 248 430 234 442 216 432 L 124 378 C 108 368 100 350 100 330 Z" />
+      <!-- Right Face -->
+      <path d="M 412 196 C 412 184 400 178 388 185 L 274 250 C 264 256 264 268 264 280 L 264 412 C 264 430 278 442 296 432 L 388 378 C 404 368 412 350 412 330 Z" />
+    </g>
+
+    <!-- Center Cutout Lines -->
+    <path d="M 256 220 L 256 270 M 230 240 L 282 270 M 282 240 L 230 270" stroke="#050505" stroke-width="16" stroke-linecap="round" />
+
+    <!-- LOHZ23 Brand Text -->
+    <text x="256" y="520" text-anchor="middle" font-family="'Plus Jakarta Sans', 'Inter', sans-serif" font-weight="800" font-size="56" fill="#FFFFFF" letter-spacing="4">LOHZ23</text>
+    
+    <!-- SINCE 2026 -->
+    <text x="256" y="570" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="600" font-size="24" fill="#EAEAEA" letter-spacing="12">SINCE 2026</text>
+  </g>
+</svg>

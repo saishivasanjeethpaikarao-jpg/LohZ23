@@ -53,6 +53,7 @@ import { CognitiveEvent, CognitiveDecision } from "./lib/cognitiveState";
 import { MemoryRetrieval } from "./lib/memoryRetrieval";
 import { useAuth } from "./contexts/AuthContext";
 import type { ConversationMode, ConversationParticipantState, SpeakerTurn } from "./lib/conversation/types";
+import { speechService } from "./lib/speechSynthesis";
 
 export default function App() {
   const { user, getIdToken } = useAuth();
@@ -420,13 +421,14 @@ export default function App() {
 
     const loop = new CognitiveLoop({
       onSpeech: (text: string) => {
-        // Cognitive loop wants LOHZ to speak — dispatch speech event
         console.log("[Cognitive] LOHZ wants to speak:", text);
-        if (sessionRef.current && stateRef.current !== "disconnected") {
-          // Use voice if connected, otherwise add to transcript
-          addTranscriptEntry("assistant", text);
-        } else {
-          addTranscriptEntry("assistant", text);
+        addTranscriptEntry("assistant", text);
+        setModelCaption(text);
+        if (stateRef.current === "disconnected") {
+          speechService.speak(text, {
+            onStart: () => setCharacterState("speaking"),
+            onEnd: () => setCharacterState("idle"),
+          });
         }
       },
       onToolUse: (tool: string, args: Record<string, unknown>) => {
@@ -874,7 +876,12 @@ export default function App() {
       setModelCaption(reply);
       setUserCaption("");
       setActiveEmotion(detectEmotionFromText(reply));
-      setCharacterState("idle");
+
+      // Speak assistant voice reply with companion lip sync
+      speechService.speak(reply, {
+        onStart: () => setCharacterState("speaking"),
+        onEnd: () => setCharacterState("idle"),
+      });
     } catch (error: any) {
       const message = error?.message || "The authenticated cognitive service is unavailable.";
       setErrorText(message);
@@ -1822,9 +1829,11 @@ export default function App() {
         onClose={() => setShowVoiceModulator(false)}
         onSpeedChange={(speed) => {
           sessionRef.current?.setPlaybackSpeed(speed);
+          speechService.setRate(speed);
         }}
         onPitchChange={(cents) => {
           sessionRef.current?.setVoicePitch(cents);
+          speechService.setPitchFromCents(cents);
         }}
       />
 

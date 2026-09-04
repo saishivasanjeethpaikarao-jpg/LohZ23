@@ -166,8 +166,17 @@
 
         <div id="auth-status-msg" class="auth-status">Ready to authenticate.</div>
 
+        <div id="launch-container" style="display: none; margin-top: 20px;">
+          <a id="btn-launch-app" href="#" class="auth-btn-google" style="background: #e63946; color: #fff; text-decoration: none; display: flex; align-items: center; justify-content: center; font-weight: 700; box-shadow: 0 8px 24px rgba(230,57,70,0.35); border: none;">
+            🚀 OPEN LOHZ DESKTOP COMPANION
+          </a>
+          <p style="font-size: 0.8rem; color: #64748b; margin-top: 10px;">
+            Click above if LOHZ Desktop did not launch automatically.
+          </p>
+        </div>
+
         <p class="auth-note">
-          Once authenticated, your browser will redirect into <strong>lohz://auth/callback</strong> to load your secure memory vault directly inside LOHZ Desktop.
+          Once authenticated, your browser redirects to <strong>lohz://auth/callback</strong> or syncs directly with your running desktop companion.
         </p>
       </div>
     </main>
@@ -205,6 +214,8 @@
     const statusEl = document.getElementById("auth-status-msg");
     const googleBtn = document.getElementById("btn-google-sign-in");
     const guestBtn = document.getElementById("btn-guest-sign-in");
+    const launchContainer = document.getElementById("launch-container");
+    const launchBtn = document.getElementById("btn-launch-app");
 
     // Read state or correlator from URL query parameters
     const urlParams = new URLSearchParams(window.location.search);
@@ -217,7 +228,7 @@
     }
 
     async function handleAuthSuccess(user, isGuest = false) {
-      setStatus("Generating secure authentication token...", "success");
+      setStatus("Authenticating companion session...", "success");
       try {
         const idToken = await user.getIdToken();
         const callbackUrl = new URL(redirectUri);
@@ -228,12 +239,42 @@
         if (user.displayName) callbackUrl.searchParams.set("displayName", user.displayName);
         if (user.email) callbackUrl.searchParams.set("email", user.email);
 
-        setStatus("Opening LOHZ Desktop companion via lohz:// ...", "success");
-        window.location.href = callbackUrl.toString();
+        if (launchContainer && launchBtn) {
+          launchBtn.href = callbackUrl.toString();
+          launchContainer.style.display = "block";
+        }
+
+        // Method 1: Direct Localhost Loopback Sync (immediate handoff to running app)
+        const payload = {
+          token: idToken,
+          uid: user.uid,
+          displayName: user.displayName || "",
+          email: user.email || "",
+          photoURL: user.photoURL || "",
+          guest: isGuest,
+          state: state
+        };
+
+        const trySendLoopback = async (endpoint) => {
+          try {
+            await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+          } catch (e) {}
+        };
+
+        trySendLoopback("http://127.0.0.1:3210/api/auth/desktop-session");
+        trySendLoopback("http://localhost:3210/api/auth/desktop-session");
+
+        // Method 2: System protocol launch
+        setStatus("Opening LOHZ Desktop companion...", "success");
+        window.location.assign(callbackUrl.toString());
 
         setTimeout(() => {
-          setStatus("Authentication complete! You can safely return to the LOHZ Desktop application.", "success");
-        }, 2000);
+          setStatus("Authentication verified! Click the button above if LOHZ Desktop did not launch.", "success");
+        }, 1500);
       } catch (err) {
         setStatus("Failed to complete handoff: " + (err.message || String(err)), "error");
       }

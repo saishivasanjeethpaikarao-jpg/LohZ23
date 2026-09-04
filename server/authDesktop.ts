@@ -34,6 +34,19 @@ function sweepCallbacks(): void {
   }
 }
 
+interface DesktopSessionPayload {
+  token?: string;
+  uid?: string;
+  displayName?: string;
+  email?: string;
+  photoURL?: string;
+  guest?: boolean;
+  state?: string;
+  timestamp: number;
+}
+
+let latestDesktopSession: DesktopSessionPayload | null = null;
+
 export function registerDesktopAuthRoutes(
   router: Router,
   firebaseConfig: Record<string, string>
@@ -116,6 +129,54 @@ export function registerDesktopAuthRoutes(
       const msg = err instanceof Error ? err.message : "Unknown error";
       res.status(500).json({ ok: false, error: "Failed to create guest session: " + msg });
     }
+  });
+
+  // Phase 49: Desktop loopback authentication session bridge
+  router.options("/api/auth/desktop-session", (_req: Request, res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.status(204).end();
+  });
+
+  router.post("/api/auth/desktop-session", (req: Request, res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    const { token, uid, displayName, email, photoURL, guest, state } = req.body ?? {};
+    if (!token && !uid) {
+      res.status(400).json({ ok: false, error: "Missing token or uid" });
+      return;
+    }
+    latestDesktopSession = {
+      token: typeof token === "string" ? token : undefined,
+      uid: typeof uid === "string" ? uid : undefined,
+      displayName: typeof displayName === "string" ? displayName : undefined,
+      email: typeof email === "string" ? email : undefined,
+      photoURL: typeof photoURL === "string" ? photoURL : undefined,
+      guest: Boolean(guest),
+      state: typeof state === "string" ? state : undefined,
+      timestamp: Date.now(),
+    };
+    res.json({ ok: true });
+  });
+
+  router.get("/api/auth/desktop-session", (_req: Request, res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (!latestDesktopSession) {
+      res.json({ ok: false, session: null });
+      return;
+    }
+    if (Date.now() - latestDesktopSession.timestamp > 300_000) {
+      latestDesktopSession = null;
+      res.json({ ok: false, session: null });
+      return;
+    }
+    res.json({ ok: true, session: latestDesktopSession });
+  });
+
+  router.post("/api/auth/clear-desktop-session", (_req: Request, res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    latestDesktopSession = null;
+    res.json({ ok: true });
   });
 }
 

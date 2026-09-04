@@ -58,7 +58,7 @@ const APP_PROFILES: AppProfile[] = [
     processNames: ["msedge"],
   },
   {
-    aliases: ["vscode", "vs code", "visual studio code", "code"],
+    aliases: ["vscode", "vs code", "visual studio code", "code", "vs", "code.exe"],
     exeName: "Code.exe",
     candidates: [
       path.join(os.homedir(), "AppData", "Local", "Programs", "Microsoft VS Code", "Code.exe"),
@@ -161,6 +161,16 @@ export async function resolveApp(name: string): Promise<ResolvedApp | null> {
   }
   const onPath = await lookupOnPath(profile.exeName);
   if (onPath) return { exePath: onPath, profile };
+  if (profile.exeName.endsWith(".exe")) {
+    const cmdName = profile.exeName.replace(/\.exe$/i, ".cmd");
+    const onPathCmd = await lookupOnPath(cmdName);
+    if (onPathCmd) {
+      const baseDir = path.dirname(onPathCmd);
+      const siblingExe = path.join(baseDir, "..", profile.exeName);
+      if (fs.existsSync(siblingExe)) return { exePath: siblingExe, profile };
+      return { exePath: onPathCmd, profile };
+    }
+  }
   return null;
 }
 

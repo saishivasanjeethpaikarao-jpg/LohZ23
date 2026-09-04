@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" fill="none">
+  <defs>
+    <!-- Gold Metallic Linear Gradient -->
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B8860B" />
+      <stop offset="35%" stop-color="#FFD700" />
+      <stop offset="70%" stop-color="#C5A059" />
+      <stop offset="100%" stop-color="#996515" />
+    </linearGradient>
+    
+    <!-- Soft Inner Glow -->
+    <radialGradient id="portalGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF3300" stop-opacity="0.12"/>
+      <stop offset="70%" stop-color="#FAF7F2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background Glow & Canvas Rectangle -->
+  <rect x="50" y="50" width="500" height="500" rx="4" fill="#FAF7F2" stroke="url(#goldGradient)" stroke-width="2"/>
+  <circle cx="300" cy="300" r="210" fill="url(#portalGlow)" />
+
+  <!-- Outer Ornate Frame Lines -->
+  <rect x="70" y="70" width="460" height="460" fill="none" stroke="url(#goldGradient)" stroke-width="4" stroke-dasharray="80 10 20 10"/>
+  <rect x="85" y="85" width="430" height="430" fill="none" stroke="#36080C" stroke-width="1.5" stroke-opacity="0.2"/>
+
+  <!-- Corner '+' Marks -->
+  <path d="M 60 60 L 80 60 M 70 50 L 70 70" stroke="#FF3300" stroke-width="2" />
+  <path d="M 520 60 L 540 60 M 530 50 L 530 70" stroke="#FF3300" stroke-width="2" />
+  <path d="M 60 540 L 80 540 M 70 530 L 70 550" stroke="#FF3300" stroke-width="2" />
+  <path d="M 520 540 L 540 540 M 530 530 L 530 550" stroke="#FF3300" stroke-width="2" />
+
+  <!-- Center Ornate Gold Frame with Chamfered-Corner Z Emblem -->
+  <g transform="translate(180, 180)">
+    <!-- Outer Gold Frame Square -->
+    <rect x="0" y="0" width="240" height="240" rx="24" fill="#36080C" stroke="url(#goldGradient)" stroke-width="8"/>
+    
+    <!-- Chamfered Cut Corner Notch Accent -->
+    <path d="M 180 0 L 240 60 L 240 0 Z" fill="url(#goldGradient)" />
+
+    <!-- Negative-Space Z Emblem -->
+    <path d="M 60 70 H 180 L 70 170 H 180" stroke="#FAF7F2" stroke-width="20" stroke-linecap="square" stroke-linejoin="miter" fill="none"/>
+    <path d="M 60 70 H 180 L 70 170 H 180" stroke="#FF3300" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter" fill="none"/>
+  </g>
+
+  <!-- Museum Exhibition Micro-Labels -->
+  <text x="300" y="475" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700" fill="#706860" letter-spacing="4">EXHIBIT ARTIFACT NO. 023 — LOHZ AGENT</text>
+  <text x="300" y="495" text-anchor="middle" font-family="'Bodoni Moda', serif" font-size="16" font-style="italic" fill="#36080C">The Art That Keeps Speaking</text>
+</svg>
