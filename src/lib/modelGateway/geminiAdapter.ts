@@ -68,11 +68,21 @@ export class GeminiAdapter implements ModelProvider {
       config.systemInstruction = request.systemInstruction;
     }
 
+    let contents: any = request.prompt;
+    if (request.images && request.images.length > 0) {
+      contents = [
+        ...request.images.map((img) => ({
+          inlineData: { mimeType: img.mimeType, data: img.data },
+        })),
+        { text: request.prompt },
+      ];
+    }
+
     let response: any;
     try {
       response = await client.models.generateContent({
         model,
-        contents: request.prompt,
+        contents,
         config,
       });
     } catch (err) {
@@ -81,7 +91,7 @@ export class GeminiAdapter implements ModelProvider {
       try {
         response = await client.models.generateContent({
           model: fallbackModel,
-          contents: request.prompt,
+          contents,
           config,
         });
         model = fallbackModel;

@@ -25,5 +25,8 @@ contextBridge.exposeInMainWorld("lohzDesktop", {
     ipcRenderer.on("desktop:pill-shown", handler);
     return () => { ipcRenderer.removeListener("desktop:pill-shown", handler); };
   },
+  /** Native Desktop Screen Vision capture */
+  captureScreen: (opts?: { maxWidth?: number }): Promise<{ ok: boolean; dataUrl?: string; width?: number; height?: number; error?: string }> =>
+    ipcRenderer.invoke("desktop:capture-screen", opts),
 });
 

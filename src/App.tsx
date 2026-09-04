@@ -7,6 +7,9 @@ import { TextInput } from "./components/TextInput";
 import { SpotlightPill } from "./components/SpotlightPill";
 import { ClipboardSentinelChip } from "./components/ClipboardSentinelChip";
 import { classifyClipboardContent, ClipboardActionChip } from "./lib/clipboardSentinel";
+import { VisionAlertChip } from "./components/VisionAlertChip";
+import { VisionWatchdog } from "./lib/visionClient";
+import type { VisionInspectResult } from "./lib/vision/screenVisionService";
 import { TranscriptionPanel, TranscriptEntry } from "./components/TranscriptionPanel";
 import { Settings as SettingsIcon } from "lucide-react";
 import { AgentStatus } from "../windows-agent/types";
@@ -630,6 +633,7 @@ export default function App() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [showMemoryDashboard, setShowMemoryDashboard] = useState<boolean>(false);
   const [clipboardChip, setClipboardChip] = useState<ClipboardActionChip | null>(null);
+  const [visionAlert, setVisionAlert] = useState<VisionInspectResult | null>(null);
   const lastClipboardTextRef = useRef<string>("");
 
   const sessionRef = useRef<LohzAudioSession | null>(null);
@@ -1008,6 +1012,24 @@ export default function App() {
       clearInterval(interval);
     };
   }, [handleTextSend, handleThemeChange]);
+
+  // Proactive Screen Vision Sentinel Watchdog
+  useEffect(() => {
+    const isDesktop = Boolean((window as any).lohzDesktop);
+    if (!isDesktop) return;
+
+    let watchdog: VisionWatchdog | null = new VisionWatchdog();
+    watchdog.start((alert) => {
+      setVisionAlert(alert);
+    }, 25000);
+
+    return () => {
+      if (watchdog) {
+        watchdog.stop();
+        watchdog = null;
+      }
+    };
+  }, []);
 
   const isPillView = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "pill";
   if (isPillView) {
@@ -1908,6 +1930,16 @@ export default function App() {
       <ClipboardSentinelChip
         chip={clipboardChip}
         onDismiss={() => setClipboardChip(null)}
+      />
+
+      {/* Proactive Screen Vision Sentinel Alert */}
+      <VisionAlertChip
+        alert={visionAlert}
+        onDismiss={() => setVisionAlert(null)}
+        onFix={(prompt) => {
+          setVisionAlert(null);
+          void handleTextSend(prompt);
+        }}
       />
     </div>
   );

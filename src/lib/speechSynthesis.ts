@@ -30,6 +30,21 @@ class SpeechService {
     }
   }
 
+  public getVoices(): SpeechSynthesisVoice[] {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
+    return window.speechSynthesis.getVoices();
+  }
+
+  public setVoiceByName(name: string): boolean {
+    const voices = this.getVoices();
+    const match = voices.find((v) => v.name === name || v.name.toLowerCase().includes(name.toLowerCase()));
+    if (match) {
+      this.selectedVoice = match;
+      return true;
+    }
+    return false;
+  }
+
   private loadVoices(): void {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const voices = window.speechSynthesis.getVoices();
@@ -38,13 +53,14 @@ class SpeechService {
 
     // Prioritize high-quality, natural female/companion voices
     const preferredNames = [
-      "Microsoft Zira",
       "Microsoft Jenny Online",
+      "Microsoft Zira",
       "Google US English",
       "Samantha",
       "Victoria",
       "Karen",
       "Microsoft Aria Online",
+      "Microsoft David",
       "en-US",
     ];
 
@@ -153,9 +169,22 @@ class SpeechService {
 
       this.currentUtterance = utterance;
 
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      } catch {}
+
+      // Chrome/Windows speech bug workaround: long utterances pause after 14-15s
+      const resumeTicker = setInterval(() => {
+        if (!window.speechSynthesis.speaking) {
+          clearInterval(resumeTicker);
+        } else {
+          try {
+            window.speechSynthesis.resume();
+          } catch {}
+        }
+      }, 4000);
 
       window.speechSynthesis.speak(utterance);
     } catch (err) {

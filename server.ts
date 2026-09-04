@@ -19,6 +19,7 @@ import { credentialStore } from "./src/credentialStore";
 import { authMiddleware, verifyToken, initFirebaseAdmin, AuthenticatedRequest } from "./server/authMiddleware";
 import { registerDesktopAuthRoutes } from "./server/authDesktop";
 import { getProductionGateway } from "./src/lib/modelGateway/productionGateway";
+import { ScreenVisionService } from "./src/lib/vision/screenVisionService";
 import {
   createProductionFirestoreLike,
   getFirestoreUserStore,
@@ -194,6 +195,7 @@ async function startServer() {
     "createFolder", "renameFile", "openUrl", "listWindows", "focusWindow",
     "minimizeWindow", "maximizeWindow", "takeScreenshot", "clipboardRead",
     "clipboardWrite", "getSystemInfo", "getVolume", "setVolume",
+    "mouseClick", "mouseMove", "keyType", "hotkey",
   ] : [];
   // Phase 37 — one operational self-model. The legacy SelfEvaluationEngine
   // remains task-outcome learning; this engine owns only measured runtime health.
@@ -1126,6 +1128,44 @@ async function startServer() {
       res.json({ success, message, provider });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Proactive Screen Vision endpoint
+  app.post("/api/vision/inspect", async (req, res) => {
+    try {
+      const { imageBase64, mode, question } = req.body || {};
+      const userId = (req as AuthenticatedRequest).userId;
+
+      let finalB64: string = typeof imageBase64 === "string" ? imageBase64 : "";
+      // If no image is provided from client, take a live screenshot via Windows tool if on Windows
+      if (!finalB64 && process.platform === "win32") {
+        const screenshotTool = getTool("takeScreenshot");
+        if (screenshotTool) {
+          const result = await screenshotTool.execute({});
+          if (result && result.data && (result.data as any).path) {
+            const fs = await import("fs");
+            const buf = await fs.promises.readFile((result.data as any).path);
+            finalB64 = buf.toString("base64");
+          }
+        }
+      }
+
+      if (!finalB64) {
+        return res.status(400).json({ error: "Missing imageBase64 and unable to capture screen." });
+      }
+
+      const visionService = new ScreenVisionService(productionGateway);
+      const result = await visionService.inspectScreen({
+        imageBase64: finalB64,
+        mode: mode || "error_detect",
+        question,
+        userId,
+      });
+
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Screen vision analysis failed" });
     }
   });
 

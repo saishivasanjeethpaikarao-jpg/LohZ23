@@ -12,7 +12,8 @@ export type ToolCategory =
   | "windows"
   | "clipboard"
   | "screen"
-  | "system";
+  | "system"
+  | "automation";
 
 export interface ToolError {
   code: string;

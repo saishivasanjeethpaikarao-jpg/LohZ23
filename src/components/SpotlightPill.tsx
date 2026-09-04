@@ -16,16 +16,20 @@ import {
   CornerDownLeft,
   Loader2,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Eye
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { speechService } from "../lib/speechSynthesis";
+import { captureCurrentScreen, inspectScreenWithLohz } from "../lib/visionClient";
 
 interface SpotlightPillProps {
   themeColor?: string;
 }
 
 const QUICK_ACTIONS = [
+  { id: "debug_screen", label: "Vision: Debug Screen", query: "debug my screen", icon: Eye, color: "text-rose-400" },
+  { id: "explain_screen", label: "Vision: What's on screen?", query: "what is on my screen", icon: Eye, color: "text-cyan-400" },
   { id: "vscode", label: "Open VS Code", query: "open vs code", icon: Terminal, color: "text-blue-400" },
   { id: "youtube", label: "YouTube on Chrome", query: "open youtube on chrome", icon: Globe, color: "text-red-400" },
   { id: "search_yt", label: "Search YouTube: Chill Lofi", query: "search youtube for lofi beats", icon: Search, color: "text-amber-400" },
@@ -120,6 +124,28 @@ export const SpotlightPill: React.FC<SpotlightPillProps> = ({ themeColor = "viol
     setResult(null);
 
     try {
+      // Direct Vision Inspection Check
+      if (/(debug|fix|explain|what('?s| is) on|inspect) (my )?screen/i.test(text)) {
+        const mode = /debug|fix|error/i.test(text) ? "error_detect" : "screen_summary";
+        const capture = await captureCurrentScreen(1280);
+        const token = (await getIdToken()) || undefined;
+        const visionRes = await inspectScreenWithLohz({
+          imageBase64: capture.dataUrl,
+          mode,
+          token,
+        });
+        const reply = visionRes.hasError && visionRes.suggestedAction
+          ? `${visionRes.summary} Suggested fix: ${visionRes.suggestedAction}`
+          : visionRes.summary;
+        setResult({
+          text: reply,
+          toolUsed: "visionInspect",
+          success: true,
+        });
+        speechService.speak(reply);
+        return;
+      }
+
       const headers = await getAuthHeaders();
       const res = await fetch("/api/route", {
         method: "POST",

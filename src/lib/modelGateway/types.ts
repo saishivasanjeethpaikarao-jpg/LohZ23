@@ -21,6 +21,8 @@ export interface GenerateRequest {
   userId?: string;
   /** Why this call exists (e.g. "memory_extraction"). Recorded in the cost log. */
   reason?: string;
+  /** Optional inline images for multimodal/vision reasoning */
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 export interface GenerateResult {

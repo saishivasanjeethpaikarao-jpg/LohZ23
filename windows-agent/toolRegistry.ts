@@ -24,6 +24,7 @@ import {
 import { clipboardRead, clipboardWrite } from "./tools/clipboard";
 import { takeScreenshot } from "./tools/screenshot";
 import { getSystemInfo, getVolume, setVolume } from "./tools/system";
+import { mouseClick, mouseMove, keyType, hotkey } from "./tools/automation";
 import { isPublicHostname, isSafeBasename, LIMITS } from "./utils/validation";
 
 function stringProp(desc: string, enumValues?: string[]): ParamSchema {
@@ -374,6 +375,96 @@ const TOOLS: ToolDefinition[] = [
       return { valid: true };
     },
     execute: setVolume,
+  },
+  {
+    name: "mouseClick",
+    description: "Clicks at absolute screen coordinates (x, y) with specified mouse button ('left', 'right', 'double').",
+    category: "automation",
+    risk: "MEDIUM",
+    timeoutMs: 10000,
+    parameters: {
+      type: "OBJECT",
+      required: ["x", "y"],
+      properties: {
+        x: { type: "INTEGER", description: "X pixel coordinate on virtual screen." },
+        y: { type: "INTEGER", description: "Y pixel coordinate on virtual screen." },
+        button: { type: "STRING", description: "Mouse button: 'left', 'right', or 'double'.", enum: ["left", "right", "double"] },
+      },
+    },
+    validate: (p) => {
+      if (typeof p.x !== "number" || typeof p.y !== "number" || p.x < 0 || p.y < 0) {
+        return { valid: false, error: "x and y must be non-negative integers." };
+      }
+      return { valid: true };
+    },
+    execute: mouseClick,
+  },
+  {
+    name: "mouseMove",
+    description: "Moves mouse cursor to absolute screen coordinates (x, y).",
+    category: "automation",
+    risk: "LOW",
+    timeoutMs: 8000,
+    parameters: {
+      type: "OBJECT",
+      required: ["x", "y"],
+      properties: {
+        x: { type: "INTEGER", description: "X pixel coordinate on virtual screen." },
+        y: { type: "INTEGER", description: "Y pixel coordinate on virtual screen." },
+      },
+    },
+    validate: (p) => {
+      if (typeof p.x !== "number" || typeof p.y !== "number" || p.x < 0 || p.y < 0) {
+        return { valid: false, error: "x and y must be non-negative integers." };
+      }
+      return { valid: true };
+    },
+    execute: mouseMove,
+  },
+  {
+    name: "keyType",
+    description: "Types a string of text into the active foreground window.",
+    category: "automation",
+    risk: "MEDIUM",
+    timeoutMs: 12000,
+    parameters: {
+      type: "OBJECT",
+      required: ["text"],
+      properties: {
+        text: { type: "STRING", description: "Text content to type." },
+      },
+    },
+    validate: (p) => {
+      if (typeof p.text !== "string" || !p.text) {
+        return { valid: false, error: "text (string) required." };
+      }
+      if (p.text.length > 5000) {
+        return { valid: false, error: "text exceeds maximum length of 5000 chars." };
+      }
+      return { valid: true };
+    },
+    execute: keyType,
+  },
+  {
+    name: "hotkey",
+    description: "Dispatches keyboard shortcut combo (e.g. 'ctrl+s', 'alt+tab', 'ctrl+shift+p', 'win+d', 'enter', 'esc').",
+    category: "automation",
+    risk: "LOW",
+    timeoutMs: 8000,
+    parameters: {
+      type: "OBJECT",
+      required: ["keys"],
+      properties: {
+        keys: { type: "STRING", description: "Key combo to dispatch (e.g. 'ctrl+s', 'alt+tab', 'win+d')." },
+      },
+    },
+    validate: (p) => {
+      if (typeof p.keys !== "string" || !p.keys.trim()) {
+        return { valid: false, error: "keys (string) required." };
+      }
+      return { valid: true };
+    },
+    execute: hotkey,
   },
 ];
 

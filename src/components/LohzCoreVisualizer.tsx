@@ -298,6 +298,75 @@ export const LohzCoreVisualizer: React.FC<LohzCoreVisualizerProps> = ({
         ctx.fill();
       });
 
+      // ==========================================
+      // 4. 3D AUDIO-REACTIVE HOLOGRAPHIC WAVEFORM RING & SPECTRUM
+      // ==========================================
+      ctx.save();
+      const visualizerCenterY = height * 0.52;
+      const baseRingRadius = Math.min(width, height) * 0.22;
+      const numPoints = 48;
+      const timeSec = systemTime * 0.001;
+
+      // 3D tilt perspective projection
+      const tiltX = (mouseRef.current.y - 0.5) * 0.35;
+      const tiltY = (mouseRef.current.x - 0.5) * 0.35;
+
+      // Draw concentric orbital rings
+      for (let r = 0; r < 3; r++) {
+        const ringScale = 0.85 + r * 0.22;
+        const ringRotation = timeSec * (r % 2 === 0 ? 0.4 : -0.3) + r * 1.2;
+        const ringAlpha = (0.15 + speechVolumeRef.current * 0.35) / (r + 1);
+
+        ctx.strokeStyle = r === 0 ? colors.glow : (r === 1 ? colors.primary : colors.secondary);
+        ctx.lineWidth = (1.5 + speechVolumeRef.current * 2) * s;
+        ctx.globalAlpha = ringAlpha;
+
+        ctx.beginPath();
+        for (let i = 0; i <= numPoints; i++) {
+          const theta = (i / numPoints) * Math.PI * 2 + ringRotation;
+          // Audio frequency reactive displacement
+          const binIndex = i % bufferLength;
+          const freqVal = (dataArray[binIndex] || 0) / 255;
+          const disp = freqVal * (40 * s * (1 + speechVolumeRef.current));
+
+          const curRadius = baseRingRadius * ringScale + disp;
+          // Apply 3D perspective squish based on tilt
+          const px = centerX + Math.cos(theta) * curRadius * (1 + tiltY * 0.5);
+          const py = visualizerCenterY + Math.sin(theta) * curRadius * (0.35 + Math.abs(tiltX));
+
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // Draw 360-degree holographic frequency spectrum bars radiating outward
+      if (audioLevel > 5 || state === "speaking" || state === "listening") {
+        ctx.globalAlpha = 0.65;
+        for (let i = 0; i < 32; i++) {
+          const theta = (i / 32) * Math.PI * 2 + timeSec * 0.2;
+          const binVal = (dataArray[(i * 2) % bufferLength] || 0) / 255;
+          const barLen = (binVal * 45 + 5) * s;
+
+          const innerR = baseRingRadius * 1.1;
+          const outerR = innerR + barLen;
+
+          const x1 = centerX + Math.cos(theta) * innerR * (1 + tiltY * 0.5);
+          const y1 = visualizerCenterY + Math.sin(theta) * innerR * (0.35 + Math.abs(tiltX));
+          const x2 = centerX + Math.cos(theta) * outerR * (1 + tiltY * 0.5);
+          const y2 = visualizerCenterY + Math.sin(theta) * outerR * (0.35 + Math.abs(tiltX));
+
+          ctx.strokeStyle = binVal > 0.5 ? colors.primary : colors.secondary;
+          ctx.lineWidth = 2 * s;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
       if (applyGlitch) {
         ctx.restore();
       }

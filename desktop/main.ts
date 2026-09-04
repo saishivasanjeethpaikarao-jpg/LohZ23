@@ -279,6 +279,24 @@ app.whenReady().then(async () => {
       pillWindow.setSize(w, Math.min(Math.max(Number(height) || 76, 76), 450));
     }
   });
+  ipcMain.handle("desktop:capture-screen", async (_event, options?: { maxWidth?: number }) => {
+    const { desktopCapturer } = await import("electron");
+    const width = Math.min(Math.max(Number(options?.maxWidth) || 1280, 480), 1920);
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width, height: Math.round((width * 9) / 16) },
+    });
+    if (!sources || sources.length === 0) {
+      return { ok: false, error: "No screen sources available." };
+    }
+    const thumbnail = sources[0].thumbnail;
+    return {
+      ok: true,
+      dataUrl: thumbnail.toDataURL(),
+      width: thumbnail.getSize().width,
+      height: thumbnail.getSize().height,
+    };
+  });
 
   await start();
 
