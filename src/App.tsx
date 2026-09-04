@@ -1219,13 +1219,14 @@ export default function App() {
         {/* Holographic Projection Screen Widget (if website opened) */}
         <AnimatePresence>
           {activeProjectorUrl && (
-            <div className="absolute inset-x-0 top-0 z-30 flex justify-center p-2">
-              <motion.div
-                initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                className="flex items-center justify-between gap-4 p-3.5 rounded-2xl border border-indigo-500/20 bg-indigo-950/45 backdrop-blur-xl shadow-lg w-full max-w-md"
-              >
+            <motion.div
+              key="holographic-projection-widget"
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="absolute inset-x-0 top-0 z-30 flex justify-center p-2"
+            >
+              <div className="flex items-center justify-between gap-4 p-3.5 rounded-2xl border border-indigo-500/20 bg-indigo-950/45 backdrop-blur-xl shadow-lg w-full max-w-md">
                 <div className="flex items-center gap-3 overflow-hidden text-left">
                   <div className="p-2 ml-1 rounded-xl bg-indigo-500/20 text-indigo-300">
                     <Globe size={18} />
@@ -1256,8 +1257,8 @@ export default function App() {
                     </button>
                   </Tooltip>
                 </div>
-              </motion.div>
-            </div>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -1321,6 +1322,7 @@ export default function App() {
         <AnimatePresence>
           {showGuide && (
             <motion.div
+              key="interactive-guide"
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1383,6 +1385,7 @@ export default function App() {
         <AnimatePresence>
           {lastCaptured && (
             <motion.div
+              key="voice-memory-toast"
               initial={{ opacity: 0, y: 16, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -16, scale: 0.95 }}
@@ -1413,6 +1416,7 @@ export default function App() {
         <AnimatePresence>
           {errorText && (
             <motion.div
+              key="global-error-banner"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 15 }}
@@ -1621,6 +1625,7 @@ export default function App() {
       <AnimatePresence>
         {activeProjectorUrl && (
           <BrowserAgent
+            key="holographic-browser-agent"
             url={activeProjectorUrl}
             onClose={() => {
               setActiveProjectorUrl(null);
@@ -1635,6 +1640,7 @@ export default function App() {
       <AnimatePresence>
         {isScreenSharing && (
           <motion.div
+            key="screen-sharing-control-hub"
             initial={{ opacity: 0, scale: 0.85, x: 50 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
             exit={{ opacity: 0, scale: 0.85, x: 50 }}
@@ -1820,6 +1826,7 @@ export default function App() {
       <AnimatePresence>
         {ambianceToast && (
           <motion.div
+            key="ambiance-toast"
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}

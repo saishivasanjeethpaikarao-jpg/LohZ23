@@ -107,6 +107,8 @@ export function extractUrl(text: string): string | undefined {
 }
 
 export function extractVolume(text: string): number | undefined {
+  if (/\bunmute\b/i.test(text)) return 30;
+  if (/\bmute\b/i.test(text)) return 0;
   const digit = text.match(/\b(?:to\s+)?(\d{1,3})\s*%?(?:\s*(?:percent|volume))?/i);
   if (digit) {
     const n = parseInt(digit[1], 10);

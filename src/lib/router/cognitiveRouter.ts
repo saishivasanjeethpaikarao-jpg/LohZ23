@@ -351,7 +351,7 @@ export class CognitiveRouter {
       response = mems.length
         ? `From memory: ${mems.map((m) => m.text).join(" | ")}`
         : "I do not have a relevant memory for that yet.";
-    } else if (canReadPrivateContext && c.intent === "context_query" && this.deps.providers?.currentContextSnapshot) {
+    } else if (canReadPrivateContext && (c.intent === "context_query" || (c.intent === "chat" && this.deps.providers?.currentContextSnapshot)) && this.deps.providers?.currentContextSnapshot) {
       const snap = await this.deps.providers.currentContextSnapshot(userId);
       response = snap
         ? `Current context: ${JSON.stringify(snap).slice(0, 400)}`

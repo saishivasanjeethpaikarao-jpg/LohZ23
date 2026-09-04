@@ -29,22 +29,7 @@ export async function takeScreenshot() {
   const { absPath, relPath } = generateScreenshotPath();
   const b64 = Buffer.from(absPath, "utf-8").toString("base64");
 
-  const script = `
-${"([System.Text.Encoding]::UTF8).GetString([System.Convert]::FromBase64String('" + b64 + "') )"}
-Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
-Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
-$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bmp.Size)
-$bmp.Save($resolved, [System.Drawing.Imaging.ImageFormat]::Png)
-$g.Dispose(); $bmp.Dispose()
-Write-Output ("OK|" + $bounds.Width + "x" + $bounds.Height + "|" + $resolved)
-`.trim()
-    .replace("$resolved", "$resolved = ");
 
-  // The script above uses $resolved directly without a prior assignment because we
-  // splice in the base64 decode. Re-state cleanly:
   const scriptFinal = `
 $resolved = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64}'))
 Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
