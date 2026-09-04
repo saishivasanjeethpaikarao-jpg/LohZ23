@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, session, globalShortcut, screen } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -11,6 +11,7 @@ import { getPlatformCapabilities } from "../src/lib/platform/capabilities";
 let backend: ChildProcess | undefined;
 let agent: ChildProcess | undefined;
 let mainWindow: BrowserWindow | undefined;
+let pillWindow: BrowserWindow | undefined;
 const port = Number(process.env.LOHZ_DESKTOP_PORT) || 3210;
 
 function spawnNode(entry: string, env: NodeJS.ProcessEnv): ChildProcess {
@@ -119,9 +120,68 @@ async function start(): Promise<void> {
   }
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  createPillWindow(appRoot);
+}
+
+function createPillWindow(appRoot: string): void {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth } = primaryDisplay.workAreaSize;
+  const pillWidth = 680;
+  const pillHeight = 76;
+  const x = Math.round((screenWidth - pillWidth) / 2);
+  const y = 130;
+
+  pillWindow = new BrowserWindow({
+    width: pillWidth,
+    height: pillHeight,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(appRoot, "dist-desktop/preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+
+  pillWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  pillWindow.loadURL(`http://127.0.0.1:${port}?view=pill`).catch(() => {});
+
+  pillWindow.on("blur", () => {
+    if (pillWindow && !pillWindow.isDestroyed() && pillWindow.isVisible()) {
+      pillWindow.hide();
+    }
+  });
+
+  try {
+    globalShortcut.register("Alt+Space", () => togglePillWindow());
+    globalShortcut.register("CommandOrControl+Shift+L", () => togglePillWindow());
+  } catch (err) {
+    console.warn("[Desktop] Global shortcut registration error:", err);
+  }
+}
+
+function togglePillWindow(): void {
+  if (!pillWindow || pillWindow.isDestroyed()) return;
+  if (pillWindow.isVisible()) {
+    pillWindow.hide();
+  } else {
+    pillWindow.show();
+    pillWindow.focus();
+    pillWindow.webContents.send("desktop:pill-shown");
+  }
 }
 
 function stop(): void {
+  try { globalShortcut.unregisterAll(); } catch {}
   backend?.kill(); agent?.kill();
   markSession(app.getPath("userData"), true);
 }
@@ -205,6 +265,19 @@ app.whenReady().then(async () => {
     const authUrl = `${netlifyHub}?state=${correlator}&redirect_uri=${encodeURIComponent("lohz://auth/callback")}`;
     await shell.openExternal(authUrl);
     return { ok: true };
+  });
+
+  ipcMain.handle("desktop:toggle-pill", () => togglePillWindow());
+  ipcMain.handle("desktop:hide-pill", () => {
+    if (pillWindow && !pillWindow.isDestroyed() && pillWindow.isVisible()) {
+      pillWindow.hide();
+    }
+  });
+  ipcMain.handle("desktop:resize-pill", (_event, { height }: { height: number }) => {
+    if (pillWindow && !pillWindow.isDestroyed()) {
+      const [w] = pillWindow.getSize();
+      pillWindow.setSize(w, Math.min(Math.max(Number(height) || 76, 76), 450));
+    }
   });
 
   await start();

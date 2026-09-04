@@ -4,6 +4,9 @@ import { LohzCoreVisualizer, LohzEmotion } from "./components/LohzCoreVisualizer
 import { BrowserAgent } from "./components/BrowserAgent";
 import { Settings } from "./components/Settings";
 import { TextInput } from "./components/TextInput";
+import { SpotlightPill } from "./components/SpotlightPill";
+import { ClipboardSentinelChip } from "./components/ClipboardSentinelChip";
+import { classifyClipboardContent, ClipboardActionChip } from "./lib/clipboardSentinel";
 import { TranscriptionPanel, TranscriptEntry } from "./components/TranscriptionPanel";
 import { Settings as SettingsIcon } from "lucide-react";
 import { AgentStatus } from "../windows-agent/types";
@@ -626,6 +629,8 @@ export default function App() {
   // LOHZ recollections database core state
   const [memories, setMemories] = useState<Memory[]>([]);
   const [showMemoryDashboard, setShowMemoryDashboard] = useState<boolean>(false);
+  const [clipboardChip, setClipboardChip] = useState<ClipboardActionChip | null>(null);
+  const lastClipboardTextRef = useRef<string>("");
 
   const sessionRef = useRef<LohzAudioSession | null>(null);
 
@@ -971,6 +976,43 @@ export default function App() {
         return "border-white/10 hover:border-indigo-500/30 bg-white/5";
     }
   };
+
+  // Contextual Clipboard Sentinel watcher
+  useEffect(() => {
+    let active = true;
+    const checkClipboard = async () => {
+      if (!active || typeof document === "undefined" || document.hidden) return;
+      try {
+        if (!navigator.clipboard?.readText) return;
+        const text = await navigator.clipboard.readText();
+        if (text && text !== lastClipboardTextRef.current && text.trim().length > 3) {
+          lastClipboardTextRef.current = text;
+          const chip = classifyClipboardContent(text, {
+            onDebugError: (err) => handleTextSend(`Please analyze and debug this error: ${err.slice(0, 1000)}`),
+            onOpenUrl: (url) => setActiveProjectorUrl(url),
+            onSetAtmosphere: (color) => handleThemeChange(color),
+            onExecuteCommand: (cmd) => handleTextSend(cmd),
+          });
+          if (chip) setClipboardChip(chip);
+        }
+      } catch {
+        /* Clipboard access silently ignored when unauthorized */
+      }
+    };
+
+    window.addEventListener("focus", checkClipboard);
+    const interval = setInterval(checkClipboard, 3000);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", checkClipboard);
+      clearInterval(interval);
+    };
+  }, [handleTextSend, handleThemeChange]);
+
+  const isPillView = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "pill";
+  if (isPillView) {
+    return <SpotlightPill themeColor={themeColor} />;
+  }
 
   return (
     <div
@@ -1860,6 +1902,12 @@ export default function App() {
         onAddMemory={handleAddManualMemory}
         onDeleteMemory={handleDeleteMemory}
         themeColor={themeColor}
+      />
+
+      {/* Contextual Clipboard Sentinel Proactive Action Chip */}
+      <ClipboardSentinelChip
+        chip={clipboardChip}
+        onDismiss={() => setClipboardChip(null)}
       />
     </div>
   );

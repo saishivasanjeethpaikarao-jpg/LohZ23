@@ -16,5 +16,14 @@ contextBridge.exposeInMainWorld("lohzDesktop", {
     ipcRenderer.on("desktop:auth-protocol-callback", handler);
     return () => { ipcRenderer.removeListener("desktop:auth-protocol-callback", handler); };
   },
+  /** Spotlight Mini HUD Pill controls */
+  togglePill: () => ipcRenderer.invoke("desktop:toggle-pill"),
+  hidePill: () => ipcRenderer.invoke("desktop:hide-pill"),
+  resizePill: (height: number) => ipcRenderer.invoke("desktop:resize-pill", { height }),
+  onPillShown: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("desktop:pill-shown", handler);
+    return () => { ipcRenderer.removeListener("desktop:pill-shown", handler); };
+  },
 });
 
